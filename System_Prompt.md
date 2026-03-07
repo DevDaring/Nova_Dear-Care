@@ -12,4 +12,5 @@ I will provide all keys in .env file in Code folder.
 I have already created env.template for your understanding.
 You should create this files in Code folder.
 If intnet is not not available it will store information in local.
+Understand the constraint of sdk s100. This should not hanged or memory should not overflown.
 
