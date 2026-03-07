@@ -1,0 +1,35 @@
+# Pocket ASHA - Requirements
+# Platform: RDK S100 (Ubuntu 22.04, ARM64, Python 3.10)
+# Install: pip3 install -r requirements.txt
+
+# AWS SDK
+boto3>=1.34.0
+botocore>=1.34.0
+
+# Environment
+python-dotenv>=1.0.0
+
+# Computer Vision & OCR
+numpy==1.26.4
+opencv-python==4.6.0.66
+paddlepaddle-xpu==2.6.1
+paddleocr==2.7.0.3
+
+# Audio / TTS / STT
+pyttsx3>=2.90
+SpeechRecognition>=3.10.0
+PyAudio>=0.2.14
+
+# Encryption
+cryptography>=42.0.0
+
+# Web (optional Flask dashboard)
+Flask>=3.0.0
+
+# I2C sensors
+smbus2>=0.4.0
+bme280>=0.2.4
+
+# Utilities
+Pillow>=10.0.0
+requests>=2.31.0

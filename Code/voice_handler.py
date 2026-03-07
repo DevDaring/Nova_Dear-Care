@@ -1,0 +1,384 @@
+#!/usr/bin/env python3
+"""
+voice_handler.py - Audio recording, TTS (Polly/pyttsx3), STT (Transcribe/SpeechRecognition)
+for Pocket ASHA on RDK S100.
+
+Audio flow:
+ INPUT:  Jabra USB Microphone (hw:1,0) via arecord
+ OUTPUT: Bose Bluetooth Speaker via PulseAudio paplay
+"""
+
+import os
+import re
+import subprocess
+import time
+from pathlib import Path
+from typing import Optional, Tuple
+
+from utils import get_logger
+
+_log = None
+_pyttsx_engine = None
+
+
+def _logger():
+    global _log
+    if _log is None:
+        _log = get_logger()
+    return _log
+
+
+# ============================================================
+# Recording — from Jabra USB Microphone
+# ============================================================
+
+def _release_audio_device():
+    try:
+        subprocess.run(["pkill", "-9", "arecord"], capture_output=True, timeout=2)
+        time.sleep(0.2)
+    except Exception:
+        pass
+
+
+def _discover_mic() -> str:
+    """Auto-discover Jabra or USB mic ALSA device."""
+    default = "plughw:1,0"
+    try:
+        res = subprocess.run(["arecord", "-l"], capture_output=True, text=True, timeout=5)
+        for line in res.stdout.split("\n"):
+            ll = line.lower()
+            if "jabra" in ll:
+                m = re.search(r"card\s+(\d+)", line)
+                if m:
+                    return f"plughw:{m.group(1)},0"
+            if "usb" in ll and "card" in ll:
+                m = re.search(r"card\s+(\d+)", line)
+                if m:
+                    return f"plughw:{m.group(1)},0"
+    except Exception:
+        pass
+    return default
+
+
+def record_audio(output_path: str, duration: int = 7, device: str = None) -> bool:
+    """Record WAV from Jabra mic. Returns True on success."""
+    from config import JABRA_CAPTURE_DEV, AUDIO_SAMPLE_RATE, AUDIO_CHANNELS
+    device = device or JABRA_CAPTURE_DEV
+    if device.startswith("hw:"):
+        device = "plug" + device
+    _release_audio_device()
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+    for attempt in range(2):
+        cmd = ["arecord", "-D", device, "-f", "S16_LE",
+               "-r", str(AUDIO_SAMPLE_RATE), "-c", str(AUDIO_CHANNELS),
+               "-d", str(duration), output_path]
+        _logger().info("[VOICE] Recording %ds (attempt %d)…", duration, attempt + 1)
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=duration + 5)
+            if res.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+                _logger().info("[VOICE] Recorded %s (%d bytes)", output_path, os.path.getsize(output_path))
+                return True
+            if "busy" in res.stderr.lower():
+                _release_audio_device()
+                time.sleep(0.5)
+                continue
+        except subprocess.TimeoutExpired:
+            pass
+        break
+
+    # Fallback: parecord
+    return _record_pulseaudio(output_path, duration)
+
+
+def _record_pulseaudio(output_path: str, duration: int) -> bool:
+    from config import AUDIO_SAMPLE_RATE, AUDIO_CHANNELS
+    try:
+        cmd = ["parecord", "--channels", str(AUDIO_CHANNELS), "--rate", str(AUDIO_SAMPLE_RATE),
+               "--format", "s16le", "--file-format", "wav", output_path]
+        subprocess.run(cmd, capture_output=True, text=True, timeout=duration + 1)
+    except subprocess.TimeoutExpired:
+        pass
+    if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+        return True
+    return False
+
+
+# ============================================================
+# Playback — Bose Bluetooth Speaker
+# ============================================================
+
+def _discover_bt_sink() -> Optional[str]:
+    try:
+        res = subprocess.run(["pactl", "list", "short", "sinks"], capture_output=True, text=True, timeout=5)
+        for line in res.stdout.split("\n"):
+            if "bluez_sink" in line:
+                return line.split()[1]
+    except Exception:
+        pass
+    return None
+
+
+def play_audio(audio_path: str) -> bool:
+    """Play WAV/PCM file via Bluetooth speaker, fallback to default sink."""
+    from config import BOSE_SINK
+    if not os.path.exists(audio_path):
+        return False
+    # Try Bose sink
+    for sink in [BOSE_SINK, _discover_bt_sink(), None]:
+        cmd = ["paplay"]
+        if sink:
+            cmd += ["-d", sink]
+        cmd.append(audio_path)
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            if res.returncode == 0:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+# ============================================================
+# TTS — Amazon Polly (online) → pyttsx3 (offline)
+# ============================================================
+
+def text_to_speech(text: str, output_path: str) -> bool:
+    """Convert text to WAV. Tries Polly first, then pyttsx3 offline."""
+    if _try_polly_tts(text, output_path):
+        return True
+    _logger().info("[TTS] Polly unavailable, using pyttsx3 offline")
+    return _try_pyttsx3(text, output_path)
+
+
+def _try_polly_tts(text: str, output_path: str) -> bool:
+    try:
+        import boto3
+        from config import AWS_REGION
+        from language_handler import get_polly_voice, get_polly_lang_code, get_language_info
+
+        info = get_language_info()
+        voice = info.get("polly_voice") or "Kajal"
+        engine = info.get("polly_engine", "neural")
+        lang_code = info.get("polly_lang", "en-IN")
+
+        client = boto3.client("polly", region_name=AWS_REGION)
+        kwargs = dict(
+            Text=text, OutputFormat="pcm", VoiceId=voice,
+            SampleRate="16000", LanguageCode=lang_code,
+        )
+        # neural engine only for voices that support it
+        if engine == "neural":
+            kwargs["Engine"] = "neural"
+        resp = client.synthesize_speech(**kwargs)
+
+        pcm = resp["AudioStream"].read()
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        # Wrap raw PCM in a WAV header
+        _pcm_to_wav(pcm, output_path)
+        _logger().info("[TTS] Polly generated: %s", output_path)
+        return True
+    except Exception as e:
+        _logger().warning("[TTS] Polly error: %s", e)
+        return False
+
+
+def _pcm_to_wav(pcm_data: bytes, wav_path: str, rate: int = 16000, channels: int = 1, width: int = 2):
+    """Wrap raw PCM bytes in a WAV file."""
+    import struct
+    data_len = len(pcm_data)
+    with open(wav_path, "wb") as f:
+        # RIFF header
+        f.write(b"RIFF")
+        f.write(struct.pack("<I", 36 + data_len))
+        f.write(b"WAVE")
+        # fmt chunk
+        f.write(b"fmt ")
+        f.write(struct.pack("<I", 16))
+        f.write(struct.pack("<HHIIHH", 1, channels, rate, rate * channels * width, channels * width, width * 8))
+        # data chunk
+        f.write(b"data")
+        f.write(struct.pack("<I", data_len))
+        f.write(pcm_data)
+
+
+def _try_pyttsx3(text: str, output_path: str) -> bool:
+    global _pyttsx_engine
+    try:
+        import pyttsx3
+        if _pyttsx_engine is None:
+            _pyttsx_engine = pyttsx3.init()
+            _pyttsx_engine.setProperty("rate", 150)
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        _pyttsx_engine.save_to_file(text, output_path)
+        _pyttsx_engine.runAndWait()
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 100:
+            _logger().info("[TTS] pyttsx3 generated: %s", output_path)
+            return True
+        return False
+    except Exception as e:
+        _logger().warning("[TTS] pyttsx3 error: %s", e)
+        return False
+
+
+# ============================================================
+# STT — Amazon Transcribe (online) → SpeechRecognition (offline/free)
+# ============================================================
+
+def speech_to_text(audio_path: str) -> Tuple[str, float]:
+    """Transcribe audio. Returns (text, confidence). Tries Transcribe then free fallback."""
+    text, conf = _try_transcribe_stt(audio_path)
+    if text:
+        return text, conf
+    return _try_speech_recognition(audio_path)
+
+
+def _try_transcribe_stt(audio_path: str) -> Tuple[str, float]:
+    """Use AWS Transcribe streaming (or batch via S3) for STT."""
+    try:
+        import boto3, json, uuid
+        from config import AWS_REGION, S3_BUCKET_NAME
+        from language_handler import get_transcribe_lang_code
+
+        lang = get_transcribe_lang_code()
+        if not lang:
+            return "", 0.0
+
+        s3 = boto3.client("s3", region_name=AWS_REGION)
+        tc = boto3.client("transcribe", region_name=AWS_REGION)
+
+        key = f"temp/audio_{uuid.uuid4().hex[:8]}.wav"
+        s3.upload_file(audio_path, S3_BUCKET_NAME, key)
+
+        job_name = f"asha_{uuid.uuid4().hex[:8]}"
+        tc.start_transcription_job(
+            TranscriptionJobName=job_name,
+            Media={"MediaFileUri": f"s3://{S3_BUCKET_NAME}/{key}"},
+            MediaFormat="wav", LanguageCode=lang,
+        )
+        # Poll for completion (max 30s)
+        for _ in range(30):
+            status = tc.get_transcription_job(TranscriptionJobName=job_name)
+            st = status["TranscriptionJob"]["TranscriptionJobStatus"]
+            if st == "COMPLETED":
+                uri = status["TranscriptionJob"]["Transcript"]["TranscriptFileUri"]
+                import urllib.request
+                with urllib.request.urlopen(uri) as resp:
+                    data = json.loads(resp.read())
+                items = data.get("results", {}).get("transcripts", [])
+                text = items[0]["transcript"] if items else ""
+                # cleanup
+                try:
+                    tc.delete_transcription_job(TranscriptionJobName=job_name)
+                    s3.delete_object(Bucket=S3_BUCKET_NAME, Key=key)
+                except Exception:
+                    pass
+                _logger().info("[STT] Transcribe: '%s'", text[:80])
+                return text, 0.92
+            if st == "FAILED":
+                break
+            time.sleep(1)
+
+        # cleanup on failure
+        try:
+            tc.delete_transcription_job(TranscriptionJobName=job_name)
+            s3.delete_object(Bucket=S3_BUCKET_NAME, Key=key)
+        except Exception:
+            pass
+        return "", 0.0
+    except Exception as e:
+        _logger().warning("[STT] Transcribe error: %s", e)
+        return "", 0.0
+
+
+def _try_speech_recognition(audio_path: str) -> Tuple[str, float]:
+    """Fallback STT using free SpeechRecognition library."""
+    try:
+        import speech_recognition as sr
+        rec = sr.Recognizer()
+        with sr.AudioFile(audio_path) as src:
+            audio = rec.record(src)
+        text = rec.recognize_google(audio)
+        _logger().info("[STT] SpeechRecognition: '%s'", text[:80])
+        return text, 0.80
+    except Exception as e:
+        _logger().warning("[STT] SpeechRecognition error: %s", e)
+        return "", 0.0
+
+
+# ============================================================
+# High-level helpers
+# ============================================================
+
+def speak(text: str) -> bool:
+    """Generate TTS and play through speaker."""
+    from config import TEMP_AUDIO_OUTPUT
+    out = str(TEMP_AUDIO_OUTPUT)
+    if text_to_speech(text, out):
+        return play_audio(out)
+    return False
+
+
+def listen(duration: int = 7) -> str:
+    """Record and transcribe (no wake word check)."""
+    from config import TEMP_AUDIO_INPUT
+    inp = str(TEMP_AUDIO_INPUT)
+    if record_audio(inp, duration):
+        text, _ = speech_to_text(inp)
+        return text
+    return ""
+
+
+def listen_for_wake_word(duration: int = 5) -> Tuple[bool, str]:
+    """Record, transcribe, check for wake word. Returns (detected, command)."""
+    from config import TEMP_AUDIO_INPUT, WAKE_WORDS, WAKE_WORD_VARIATIONS, WAKE_PHRASES
+    inp = str(TEMP_AUDIO_INPUT)
+    if not record_audio(inp, duration):
+        return False, ""
+    text, _ = speech_to_text(inp)
+    if not text:
+        return False, ""
+    return detect_wake_word(text)
+
+
+def detect_wake_word(text: str) -> Tuple[bool, str]:
+    """Check if text contains wake word 'asha' and extract command."""
+    if not text:
+        return False, ""
+    text_l = text.lower().strip()
+    from config import WAKE_WORD_VARIATIONS
+    words = text_l.split()
+    # Check first two words for any wake word variation
+    first_two = " ".join(words[:2]) if len(words) >= 2 else text_l
+    for var in WAKE_WORD_VARIATIONS:
+        if var in first_two:
+            # Extract command after the wake word
+            idx = text_l.find(var)
+            cmd = text_l[idx + len(var):].strip()
+            cmd = re.sub(r"^[,.\s]+", "", cmd)
+            cmd = re.sub(r"^(and|please|can you|could you)\s+", "", cmd, flags=re.IGNORECASE)
+            return True, cmd.strip()
+    return False, ""
+
+
+def check_audio_devices() -> dict:
+    """Check availability of audio input/output devices."""
+    status = {"mic": False, "speaker": False, "speaker_name": None}
+    try:
+        res = subprocess.run(["arecord", "-l"], capture_output=True, text=True, timeout=5)
+        if "card" in res.stdout.lower():
+            status["mic"] = True
+    except Exception:
+        pass
+    try:
+        res = subprocess.run(["pactl", "list", "short", "sinks"], capture_output=True, text=True, timeout=5)
+        for line in res.stdout.split("\n"):
+            if "bluez_sink" in line:
+                status["speaker"] = True
+                status["speaker_name"] = line.split()[1] if len(line.split()) >= 2 else None
+                break
+        if not status["speaker"] and res.stdout.strip():
+            status["speaker"] = True  # at least default sink exists
+    except Exception:
+        pass
+    return status

@@ -46,3 +46,16 @@ logs/
 # Temporary files
 *.tmp
 *.temp
+
+# Cache files
+*.cache
+.paddleocr/
+paddle_cache/
+
+# Diagnostic reports (regenerated on run)
+diagnostic_report.json
+
+# Audio/temp/data runtime folders
+Code/audio/
+Code/temp/
+Code/data/
