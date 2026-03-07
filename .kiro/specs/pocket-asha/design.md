@@ -2,9 +2,9 @@
 
 ## Overview
 
-The Pocket ASHA system is a comprehensive multimodal healthcare triage device built on the RDK x5 platform, designed specifically for rural healthcare workers in India. The system integrates hardware sensors, on-device machine learning, cloud-based intelligent processing, and multilingual voice interfaces to provide a complete healthcare workflow solution.
+The Pocket ASHA system is a comprehensive multimodal healthcare triage device built on the RDK S100 platform, designed specifically for rural healthcare workers in India. The system integrates hardware sensors, on-device machine learning, cloud-based intelligent processing, and multilingual voice interfaces to provide a complete healthcare workflow solution.
 
-The architecture follows a hybrid edge-cloud approach where critical functions like vital sign monitoring, triage classification, and basic voice interaction operate offline on the RDK x5, while advanced clinical documentation, complex analytics, and model updates leverage AWS Agentic Framework capabilities in the cloud.
+The architecture follows a hybrid edge-cloud approach where critical functions like vital sign monitoring, triage classification, and basic voice interaction operate offline on the RDK S100, while advanced clinical documentation, complex analytics, and model updates leverage AWS Agentic Framework capabilities in the cloud.
 
 Key design principles include:
 - **Offline-first operation** for reliable rural deployment
@@ -20,7 +20,7 @@ The system architecture consists of three primary layers: Hardware Integration L
 ```mermaid
 graph TB
     subgraph "Hardware Layer"
-        A[MAX30102 Sensor] --> D[RDK x5 Platform]
+        A[MAX30102 Sensor] --> D[RDK S100 Platform]
         B[Temperature Sensor] --> D
         C[Stereo Camera] --> D
         E[Microphone Array] --> D
@@ -77,7 +77,7 @@ The system processes multiple data streams concurrently, with different pathways
 ```mermaid
 sequenceDiagram
     participant U as ASHA Worker
-    participant D as RDK x5 Device
+    participant D as RDK S100 Device
     participant ML as On-Device ML
     participant AWS as AWS Agentic Framework
     participant DB as Local Storage
@@ -156,7 +156,7 @@ class VoiceActivationSystem:
 ```
 
 #### On-Device Machine Learning Engine
-- **Triage Classification Model**: Lightweight neural network optimized for RDK x5 hardware
+- **Triage Classification Model**: Lightweight neural network optimized for RDK S100 hardware
 - **Feature Extraction Pipeline**: Processes vital signs, audio features, and demographic data
 - **Inference Engine**: Real-time classification with confidence scoring
 - **Model Update Manager**: Handles over-the-air model updates from AWS
@@ -503,7 +503,7 @@ Unit tests complement property-based tests by focusing on:
 
 ### Testing Environment Setup
 
-**Hardware-in-the-Loop Testing**: Physical RDK x5 devices with actual sensors for integration testing
+**Hardware-in-the-Loop Testing**: Physical RDK S100 devices with actual sensors for integration testing
 **Cloud Service Mocking**: AWS service mocks for testing cloud integration without incurring costs
 **Multilingual Test Data**: Curated audio samples in all 10 supported Indian languages
 **Rural Environment Simulation**: Noise injection and lighting variation for realistic testing conditions

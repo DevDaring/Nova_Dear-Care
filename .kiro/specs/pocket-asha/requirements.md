@@ -10,8 +10,8 @@ The device integrates vital sign monitoring, audio capture, on-device machine le
 
 - **ASHA_Worker**: Accredited Social Health Activist - trained female community health workers in rural India
 - **Anganwadi_Worker**: Community-based childcare and health workers operating government centers
-- **Pocket_ASHA_Device**: The handheld multimodal triage and documentation unit built on RDK x5 platform
-- **RDK_x5**: Hardware platform integrating sensors, cameras, and processing capabilities
+- **Pocket_ASHA_Device**: The handheld multimodal triage and documentation unit built on RDK S100 platform
+- **RDK_S100**: Hardware platform integrating sensors, cameras, and processing capabilities
 - **Stereo_Camera**: Dual camera system for capturing prescription and patient photos
 - **Triage_Engine**: On-device ML model that classifies patient urgency levels
 - **Clinical_Note_Generator**: Cloud-based service that creates structured medical documentation
@@ -50,7 +50,7 @@ The device integrates vital sign monitoring, audio capture, on-device machine le
 
 1. WHEN capturing prescription photos, THE Stereo_Camera SHALL take high-resolution images suitable for text recognition
 2. WHEN photographing patients, THE Stereo_Camera SHALL capture clear identification photos with proper lighting compensation
-3. THE RDK_x5 SHALL store photos in organized folder structure with patient encounter timestamps
+3. THE RDK_S100 SHALL store photos in organized folder structure with patient encounter timestamps
 4. WHEN photo quality is insufficient, THE Pocket_ASHA_Device SHALL prompt for retaking with guidance
 5. THE Stereo_Camera SHALL function in various lighting conditions typical of rural healthcare settings
 
@@ -96,7 +96,7 @@ The device integrates vital sign monitoring, audio capture, on-device machine le
 
 #### Acceptance Criteria
 
-1. THE RDK_x5 SHALL transmit all patient encounter data to the AWS_Agentic_Framework for processing
+1. THE RDK_S100 SHALL transmit all patient encounter data to the AWS_Agentic_Framework for processing
 2. WHEN data is received, THE AWS_Agentic_Framework SHALL analyze patient information using intelligent agents
 3. THE AWS_Agentic_Framework SHALL provide enhanced clinical insights and recommendations back to the device
 4. WHEN processing patient photos, THE AWS_Agentic_Framework SHALL extract text from prescription images using OCR
@@ -108,7 +108,7 @@ The device integrates vital sign monitoring, audio capture, on-device machine le
 
 #### Acceptance Criteria
 
-1. THE RDK_x5 SHALL store patient encounter data in CSV_Database format for easy access and export
+1. THE RDK_S100 SHALL store patient encounter data in CSV_Database format for easy access and export
 2. THE Media_Storage SHALL organize photos and audio files in folders linked to patient encounters
 3. WHEN storing data locally, THE Pocket_ASHA_Device SHALL maintain referential integrity between CSV records and media files
 4. THE CSV_Database SHALL include timestamps, patient identifiers, vital signs, and encounter outcomes
@@ -124,7 +124,7 @@ The device integrates vital sign monitoring, audio capture, on-device machine le
 2. THE AWS_Agentic_Framework SHALL extract relevant medical information from audio recordings using speech recognition
 3. WHEN generating notes, THE AWS_Agentic_Framework SHALL include patient demographics, vital signs, symptoms, photos, and triage recommendations
 4. THE AWS_Agentic_Framework SHALL format notes according to standard medical documentation practices
-5. WHEN internet connectivity is unavailable, THE RDK_x5 SHALL queue data for later synchronization
+5. WHEN internet connectivity is unavailable, THE RDK_S100 SHALL queue data for later synchronization
 
 ### Requirement 9: Multilingual Voice Interface
 
@@ -144,10 +144,10 @@ The device integrates vital sign monitoring, audio capture, on-device machine le
 
 #### Acceptance Criteria
 
-1. THE RDK_x5 SHALL encrypt all patient data using AES-256 encryption before storage or transmission
+1. THE RDK_S100 SHALL encrypt all patient data using AES-256 encryption before storage or transmission
 2. WHEN transmitting data to AWS services, THE AWS_Agentic_Framework SHALL use TLS 1.3 or higher encryption protocols
-3. THE RDK_x5 SHALL require biometric or PIN authentication for ASHA worker access
-4. WHEN storing patient data locally, THE RDK_x5 SHALL automatically delete records older than 30 days unless explicitly retained
+3. THE RDK_S100 SHALL require biometric or PIN authentication for ASHA worker access
+4. WHEN storing patient data locally, THE RDK_S100 SHALL automatically delete records older than 30 days unless explicitly retained
 5. THE AWS_Agentic_Framework SHALL comply with Indian healthcare data protection regulations and AWS security standards
 
 ### Requirement 11: Offline Operation Capabilities
@@ -156,11 +156,11 @@ The device integrates vital sign monitoring, audio capture, on-device machine le
 
 #### Acceptance Criteria
 
-1. THE RDK_x5 SHALL perform vital sign monitoring, audio recording, photo capture, and triage classification without internet connectivity
-2. WHEN offline, THE RDK_x5 SHALL store up to 100 patient encounters in CSV_Database and Media_Storage
-3. THE RDK_x5 SHALL automatically synchronize stored data with AWS_Agentic_Framework when internet connectivity is restored
+1. THE RDK_S100 SHALL perform vital sign monitoring, audio recording, photo capture, and triage classification without internet connectivity
+2. WHEN offline, THE RDK_S100 SHALL store up to 100 patient encounters in CSV_Database and Media_Storage
+3. THE RDK_S100 SHALL automatically synchronize stored data with AWS_Agentic_Framework when internet connectivity is restored
 4. WHEN operating offline, THE Voice_Interface SHALL provide essential local language instructions from pre-loaded audio files
-5. THE RDK_x5 SHALL indicate connectivity status and queue status to users
+5. THE RDK_S100 SHALL indicate connectivity status and queue status to users
 
 ### Requirement 12: ASHA Worker Workflow Integration
 
@@ -168,11 +168,11 @@ The device integrates vital sign monitoring, audio capture, on-device machine le
 
 #### Acceptance Criteria
 
-1. THE RDK_x5 SHALL provide step-by-step workflow guidance for patient encounters through voice and visual cues
-2. WHEN starting a patient encounter, THE RDK_x5 SHALL prompt for required demographic information and photo capture
-3. THE RDK_x5 SHALL guide workers through vital sign measurement procedures with visual and audio cues
-4. WHEN triage classification indicates urgent cases, THE RDK_x5 SHALL provide specific referral recommendations
-5. THE RDK_x5 SHALL maintain encounter logs in CSV_Database for supervisor review and quality assurance
+1. THE RDK_S100 SHALL provide step-by-step workflow guidance for patient encounters through voice and visual cues
+2. WHEN starting a patient encounter, THE RDK_S100 SHALL prompt for required demographic information and photo capture
+3. THE RDK_S100 SHALL guide workers through vital sign measurement procedures with visual and audio cues
+4. WHEN triage classification indicates urgent cases, THE RDK_S100 SHALL provide specific referral recommendations
+5. THE RDK_S100 SHALL maintain encounter logs in CSV_Database for supervisor review and quality assurance
 
 ### Requirement 13: Patient Communication and Education
 
@@ -180,11 +180,11 @@ The device integrates vital sign monitoring, audio capture, on-device machine le
 
 #### Acceptance Criteria
 
-1. WHEN vital signs are measured, THE RDK_x5 SHALL explain results to patients in their local language
+1. WHEN vital signs are measured, THE RDK_S100 SHALL explain results to patients in their local language
 2. THE Voice_Interface SHALL provide health education messages relevant to detected conditions
-3. WHEN urgent referral is recommended, THE RDK_x5 SHALL explain the importance of seeking immediate care
-4. THE RDK_x5 SHALL provide printed or audio summaries of encounter results for patient records
-5. WHEN follow-up care is needed, THE RDK_x5 SHALL schedule reminders and provide care instructions
+3. WHEN urgent referral is recommended, THE RDK_S100 SHALL explain the importance of seeking immediate care
+4. THE RDK_S100 SHALL provide printed or audio summaries of encounter results for patient records
+5. WHEN follow-up care is needed, THE RDK_S100 SHALL schedule reminders and provide care instructions
 
 ### Requirement 14: System Administration and Monitoring
 
@@ -193,7 +193,7 @@ The device integrates vital sign monitoring, audio capture, on-device machine le
 #### Acceptance Criteria
 
 1. THE AWS_Agentic_Framework SHALL generate usage analytics including encounter volumes, triage accuracy, and device utilization
-2. WHEN devices require updates, THE AWS_Agentic_Framework SHALL push firmware and model updates to RDK_x5 devices automatically
+2. WHEN devices require updates, THE AWS_Agentic_Framework SHALL push firmware and model updates to RDK_S100 devices automatically
 3. THE AWS_Agentic_Framework SHALL monitor device health and alert administrators to hardware or software issues
 4. WHEN analyzing population health trends, THE AWS_Agentic_Framework SHALL aggregate anonymized encounter data for reporting
 5. THE AWS_Agentic_Framework SHALL provide dashboard interfaces for program monitoring and evaluation

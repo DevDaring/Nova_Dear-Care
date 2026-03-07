@@ -1,3 +1,4 @@
+System Details- RDK S100
 Here is a complete breakdown of everything your `rdkos_info` output tells you about the OS and kernel on your RDK S100.
 
 ## OS & Kernel at a Glance
