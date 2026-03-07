@@ -1,0 +1,76 @@
+
+sunrise@ubuntu:~$ hostname -I
+ssh sunrise@192.168.0.117 on VS code
+echo $ROS_LOCALHOST_ONLY
+
+# 1) Go to the folder where the script is
+cd ~/rdk_model_zoo/demos/OCR/PaddleOCR
+
+# 2) Activate venv (optional if already active)
+source ~/venv_ocr/bin/activate
+
+# 3) Run with clean library env (this avoids the /usr/hobot/lib conflict)
+env -u LD_LIBRARY_PATH -u LD_PRELOAD DISABLE_MODEL_SOURCE_CHECK=True python3 cpu_paddle_ocr.py --image_path data/paddleocr_test.jpg --output_folder output/predict.jpg
+
+# 4) Run mic and speaker
+cd ~/rdk_model_zoo/demos/OCR/PaddleOCR   # or any folder where you saved the script
+source ~/venv_ocr/bin/activate
+env -u LD_LIBRARY_PATH -u LD_PRELOAD python3 jabra_record_play.py
+
+# 5) Run Camera
+#Terminal A (camera publisher)
+
+#source /opt/tros/humble/setup.bash
+#export ROS_LOCALHOST_ONLY=1
+##ros2 daemon stop
+#ros2 launch mipi_cam mipi_cam_dual_channel.launch.py
+
+------------
+# Terminal 1 (camera over serial)
+source /opt/tros/humble/setup.bash
+
+# 1) Force ROS to localhost only (no Wi‑Fi)
+export ROS_LOCALHOST_ONLY=1
+export ROS_DOMAIN_ID=42
+
+# 2) Stop any old daemon using the network
+ros2 daemon stop
+
+# 3) Confirm environment
+echo "LOCALHOST_ONLY=$ROS_LOCALHOST_ONLY  DOMAIN_ID=$ROS_DOMAIN_ID"
+
+# 4) Launch camera
+ros2 launch mipi_cam mipi_cam_dual_channel.launch.py
+
+
+#Terminal B (snapshot)
+
+source /opt/tros/humble/setup.bash
+export ROS_LOCALHOST_ONLY=1
+source ~/venv_ocr/bin/activate
+
+python3 /home/sunrise/rdk_model_zoo/demos/OCR/PaddleOCR/camera_snapshot_once.py
+ls -ltr /home/sunrise/rdk_model_zoo/demos/OCR/PaddleOCR/output | tail
+
+#6) Run project
+#Step 1: Start Camera (Terminal 1)
+source /opt/tros/humble/setup.bash
+export ROS_LOCALHOST_ONLY=1
+ros2 daemon stop
+ros2 launch mipi_cam mipi_cam_dual_channel.launch.py
+
+#Make it permanent
+echo 'export GOOGLE_APPLICATION_CREDENTIALS="$HOME/gcp-credentials.json"' >> ~/.bashrc
+source ~/.bashrc
+
+# Verify
+echo $GOOGLE_APPLICATION_CREDENTIALS
+cat ~/gcp-credentials.json | head -3
+
+#Step 4: Run Care Giver (Terminal 2)
+cd ~/rdk_model_zoo/demos/OCR/PaddleOCR
+source ~/venv_ocr/bin/activate
+env -u LD_LIBRARY_PATH -u LD_PRELOAD python3 Care_Giver.py
+
+
+
