@@ -1,34 +1,104 @@
-# Camera Setup Issue — OVX8B Stereo Camera on RDK S100
+# Camera Setup Issue — SC230AI Stereo Camera on RDK S100
 
-**Date:** 2026-03-08  
-**Board:** D-Robotics RDK S100 V1P0  
-**Project:** Pocket ASHA — AI for Bharat Hackathon  
-**Status:** ❌ BLOCKED — Camera pipeline initialization fails with `hbn_camera_create` error
+**Date:** 2026-03-08
+**Board:** D-Robotics RDK S100 V1P0
+**Camera:** RDK Stereo Camera Module (SC230AI dual)
+**Project:** Pocket ASHA — AI for Bharat Hackathon
+**Status:** ❌ BLOCKED — MIPI HS reception fails; sensor initializes but no video data received
 
 ---
 
-## 1. System Specifications
+## 1. Hardware Specifications
 
-### 1.1 Board & SoC
+### 1.1 Board — D-Robotics RDK S100 V1P0
+
 | Item | Value |
 |------|-------|
 | Board | D-Robotics RDK S100 V1P0 |
-| SoC | D-Robotics (Horizon Robotics) |
+| SoC | D-Robotics S100 (Horizon Robotics) |
 | CPU | 6× ARM Cortex-A78AE (aarch64) |
 | RAM | 9.3 GB LPDDR5 |
-| Storage | 64 GB eMMC (`/dev/mmcblk0p17`, 45 GB partition, 29 GB free) |
-| Architecture | aarch64 (Little Endian) |
-
-### 1.2 OS & Kernel
-| Item | Value |
-|------|-------|
+| Storage | 64 GB eMMC (`/dev/mmcblk0p17`, 45 GB partition, 28 GB free) |
 | OS | Ubuntu 22.04.5 LTS (Jammy Jellyfish) |
-| Kernel | `6.1.112-rt43-DR-4.0.4-2510152230-gb381cb-g6c4511` |
-| Kernel Type | SMP PREEMPT_RT |
-| Build Date | Oct 15, 2025 |
+| Kernel | `6.1.112-rt43-DR-4.0.4-2510152230-gb381cb-g6c4511` (SMP PREEMPT_RT) |
 | Python | 3.10.12 (system) |
 
-### 1.3 D-Robotics SDK Packages (Installed)
+### 1.2 Camera — RDK Stereo Camera Module (SC230AI)
+
+| Item | Value |
+|------|-------|
+| Module Name | RDK Stereo Camera Module |
+| Sensor IC | **SmartSens SC230AI** (×2, stereo pair) |
+| Chip ID Register | `0x3107` (high byte), `0x3108` (low byte) |
+| Chip ID Value | **`0xCB34`** (confirmed on BOTH sensors via I2C) |
+| Resolution | 1920 × 1080 (2 MP per sensor) |
+| Format | RAW10 (Bayer) |
+| Frame Rate | 30 fps |
+| MIPI Interface | 1 data lane per sensor, 810 Mbps |
+| MCLK Requirement | 24 MHz external master clock |
+| I/O Voltage | 3.3V (per official D-Robotics camera expansion board table) |
+| Left Sensor | I2C Bus 1, address `0x30`, MIPI RX PHY 0 |
+| Right Sensor | I2C Bus 2, address `0x32`, MIPI RX PHY 1 |
+| EEPROM (left) | I2C Bus 1, address `0x50` (module), `0x58` (calibration) |
+| EEPROM (right) | I2C Bus 2, address `0x50` (module), `0x58` (calibration) |
+| Product Links | [Waveshare](https://www.waveshare.com/rdk-stereo-camera-module.htm), [Hubtronics](https://hubtronics.in/rdk-stereo-camera-module) |
+
+**IMPORTANT: This camera was previously misidentified as "OVX8B" in earlier debugging. The sensor auto-detection system matched the OVX8B driver (which uses a wildcard chip_id=0xA55A) before actually confirming the real chip ID. Direct I2C register reads prove both sensors are SC230AI (chip ID 0xCB34).**
+
+### 1.3 Camera Expansion Board
+
+| Item | Value |
+|------|-------|
+| Connector | 100-pin J25 (board-to-board, J2000 on expansion board) |
+| Power LED (D2000) | ✅ GREEN (confirmed powered) |
+| Camera connectors | J2200 (MIPI RX PHY 0) and J2201 (MIPI RX PHY 1) |
+| DIP Switch SW2200 | **LPWM** (UP) — official setting for SC230AI |
+| DIP Switch SW2201 | **3.3V** (UP) — official setting for SC230AI |
+
+**Official DIP switch settings per D-Robotics documentation:**
+
+| Camera Model | SW2200 | SW2201 |
+|:--|:--|:--|
+| SC132GS | LPWM | 3.3V |
+| **SC230AI Stereo** | **LPWM** | **3.3V** |
+| OVX8B | (not documented for expansion board) | — |
+
+Source: [D-Robotics RDK S100 Camera Expansion Board docs](https://developer.d-robotics.cc/rdk_doc/en/rdk_s/Quick_start/hardware_introduction/rdk_s100_camera_expansion_board/)
+
+### 1.4 I2C Bus Scan Results
+
+```
+Bus 1:
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+30: 30 -- -- -- -- -- -- --
+50: 50 -- -- -- -- -- -- -- 58 -- -- -- -- -- -- --
+
+Bus 2:
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+30: -- -- 32 -- -- -- -- --
+50: 50 -- -- -- -- -- -- -- 58 -- -- -- -- -- -- --
+```
+
+### 1.5 Chip ID Verification (Definitive)
+
+```bash
+# Left sensor (Bus 1, addr 0x30):
+$ sudo i2ctransfer -f -y 1 w2@0x30 0x31 0x07 r1   → 0xcb
+$ sudo i2ctransfer -f -y 1 w2@0x30 0x31 0x08 r1   → 0x34
+# Chip ID = 0xCB34 → SC230AI ✅
+
+# Right sensor (Bus 2, addr 0x32):
+$ sudo i2ctransfer -f -y 2 w2@0x32 0x31 0x07 r1   → 0xcb
+$ sudo i2ctransfer -f -y 2 w2@0x32 0x31 0x08 r1   → 0x34
+# Chip ID = 0xCB34 → SC230AI ✅
+```
+
+---
+
+## 2. Software Environment
+
+### 2.1 D-Robotics SDK Packages
+
 | Package | Version |
 |---------|---------|
 | hobot-camera | 4.0.4-20250915222135 |
@@ -39,144 +109,106 @@
 | hobot-sp-samples | 4.0.4-20251015222430 |
 | hobot-dnn | 4.0.4-20250916113831 |
 | hobot-firmware | 4.0.3-20250818222930 |
-| hobot-io | 4.0.3-20250729214623 |
 | hobot-configs | 4.0.4-20250915222545 |
-| hobot-models-basic | 4.0.6 |
-| hobot-utils | 4.0.4-20250827111619 |
 
-### 1.4 Key Libraries
-| Library | Path | Version |
-|---------|------|---------|
-| libcam.so | `/usr/hobot/lib/libcam.so.1.2.0` | 1.2.0 |
-| libvpf.so | `/usr/hobot/lib/libvpf.so.1` | — |
-| libvio.so | `/usr/hobot/lib/libvio.so.1` | — |
-| libhbmem.so | `/usr/hobot/lib/libhbmem.so.1` | — |
-| libsrcampy (Python) | `hobot_vio.libsrcampy` | via hobot-spdev 4.0.4 |
+### 2.2 SC230AI Driver & Calibration Files (ALL PRESENT ✅)
+
+| File | Path | Size | Status |
+|------|------|------|--------|
+| Sensor driver | `/usr/hobot/lib/sensor/libsc230ai.so.1.0.0` | 23,864 B | ✅ Present |
+| ISP calibration | `/usr/hobot/lib/sensor/lib_sc230ai_linear.so` | 77,088 B | ✅ Present |
+| Sensor config (.c) | `/app/multimedia_samples/vp_sensors/sc230ai/linear_1920x1080_raw10_30fps_1lane.c` | 5,153 B | ✅ Present |
+| GDC binary | `../gdc_bin/sc230ai_gdc.bin` | — | Referenced |
+| Tuning config | `/app/tuning_tool/cfg/matrix/tuning_sc230ai_dual_cim_isp_1080p/` | — | ✅ Present |
+
+### 2.3 SC230AI Sensor Config Parameters
+
+From `linear_1920x1080_raw10_30fps_1lane.c`:
+
+```c
+// MIPI config
+.lane = 1,          // 1 MIPI data lane
+.datatype = 0x2B,   // RAW10
+.fps = 30,
+.mclk = 24,         // Requests 24MHz MCLK from SoC
+.mipiclk = 810,     // 810 Mbps link rate
+.width = 1920,
+.height = 1080,
+.settle = 22,
+
+// Camera config
+.name = "sc230ai",
+.addr = 0x30,
+.eeprom_addr = 0x51,
+.sensor_mode = 6,
+.calib_lname = "lib_sc230ai_linear.so",
+
+// ISP config
+.hw_id = 0,
+.slot_id = 4,
+
+// VIN node config
+.vcon_attr.bus_main = 2,
+.cim_attr.mipi_rx = 0,
+```
+
+### 2.4 Official Dual SC230AI Config (Tuning Tool)
+
+From `/app/tuning_tool/cfg/matrix/tuning_sc230ai_dual_cim_isp_1080p/hb_j6dev.json`:
+
+```json
+{
+    "port_0": {
+        "sensor_name": "sc230ai",
+        "sensor_addr": "0x30",
+        "eeprom_addr": "0x51",
+        "calib_lname": "lib_sc230ai_linear.so",
+        "sensor_mode": 6,
+        "fps": 30,
+        "width": 1920,
+        "height": 1080
+    },
+    "port_1": {
+        "sensor_name": "sc230ai",
+        "sensor_addr": "0x32",
+        "eeprom_addr": "0x51",
+        "calib_lname": "lib_sc230ai_linear.so",
+        "sensor_mode": 6,
+        "fps": 30,
+        "width": 1920,
+        "height": 1080
+    }
+}
+```
+
+### 2.5 MIPI Host Status
+
+```
+/sys/class/vps/mipi_host0  → present ✅ (MIPI RX PHY 0, left sensor)
+/sys/class/vps/mipi_host1  → present ✅ (MIPI RX PHY 1, right sensor)
+/sys/class/vps/mipi_host4  → present ✅ (unused, for AR0820)
+```
 
 ---
 
-## 2. Camera Hardware
+## 3. Device Tree Configuration
 
-### 2.1 Camera Expansion Board
-| Item | Value |
-|------|-------|
-| Connector | 100-pin J25 (board-to-board, J2000 on expansion board) |
-| Power LED (D2000) | ✅ GREEN (confirmed powered) |
-| Camera connectors | J2200 (MIPI RX PHY 0) and J2201 (MIPI RX PHY 1) |
-| DIP Switch SW2200 | Set to **LPWM** (default) — controls MCLK/LPWM selection |
-| DIP Switch SW2201 | Set to **3.3V** (default) — camera I/O voltage |
-| Supported cameras | SC132GS, SC230AI, OVX8B (stereo pairs on J2200+J2201) |
+### 3.1 Active DTB
 
-### 2.2 Camera Sensors Detected
-**Both OVX8B stereo sensors are physically detected on I2C:**
-
-| Bus | Address | Device | Role |
-|-----|---------|--------|------|
-| I2C Bus 1 | 0x30 | **OVX8B sensor** (left) | MIPI RX PHY 0 |
-| I2C Bus 1 | 0x50 | EEPROM | Module EEPROM |
-| I2C Bus 1 | 0x58 | EEPROM | Calibration EEPROM |
-| I2C Bus 2 | 0x32 | **OVX8B sensor** (right) | MIPI RX PHY 1 |
-| I2C Bus 2 | 0x50 | EEPROM | Module EEPROM |
-| I2C Bus 2 | 0x58 | EEPROM | Calibration EEPROM |
-| I2C Bus 2 | 0x68 | Unknown | (possibly RTC or other) |
-
-### 2.3 I2C Bus Scan Results
 ```
-Bus 1:
-     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
-30: 30 -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-50: 50 -- -- -- -- -- -- -- 58 -- -- -- -- -- -- --
-
-Bus 2:
-     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
-30: -- -- 32 -- -- -- -- -- -- -- -- -- -- -- -- --
-50: 50 -- -- -- -- -- -- -- 58 -- -- -- -- -- -- --
-60: -- -- -- -- -- -- -- -- 68 -- -- -- -- -- -- --
-```
-
-### 2.4 EEPROM Data (Bus 1, addr 0x50)
-```
-0x00: 0x43    (mostly unprogrammed — all 0xFF after byte 1)
-0x01: 0x2f
-0x02-0x0f: 0xFF (unprogrammed)
-```
-The EEPROM appears to be **unprogrammed/partially programmed**, which affects which ISP calibration library the sensor driver selects.
-
----
-
-## 3. Sensor Driver Specifications
-
-### 3.1 Sensor Drivers Available
-| Driver | Path | Size |
-|--------|------|------|
-| libovx8bstd.so | `/usr/hobot/lib/sensor/libovx8bstd.so.1.2.0` | 156,392 bytes |
-| libovx8b.so | `/usr/hobot/lib/sensor/libovx8b.so.1.2.0` | 132,152 bytes |
-
-### 3.2 Auto-Detection Result
-The sensor auto-detection succeeds:
-```
-Searching camera sensor on device: /proc/device-tree/soc/vcon@0 i2c bus: 1 mipi rx phy: 0
-[0] INFO: Found sensor name:ovx8bstd-30fps on mipi rx csi 0, i2c addr 0x30,
-    config_file:linear_1920x1080_raw12_30fps_1lane.c
-```
-**Sensor IS found. The problem occurs AFTER detection, during pipeline creation.**
-
-### 3.3 ISP Calibration Libraries Required by libovx8bstd.so
-The sensor driver `libovx8bstd.so` tries to `dlopen()` one of these ISP calibration libraries based on the camera module's EEPROM data:
-
-| Library Name | Lens Module | Status |
-|-------------|-------------|--------|
-| `lib_CL-OX8GB-L121+067-L.so` | CL type, L121 lens | ❌ **NOT SHIPPED** in hobot-camera package |
-| `lib_CL-OX8GB-L030+017-L.so` | CL type, L030 lens | ❌ **NOT SHIPPED** |
-| `lib_CW-OX8GB-A120+065-L.so` | CW type, A120 lens | ❌ **NOT SHIPPED** |
-| `lib_CW-OX8GB-A030+017-L.so` | CW type, A030 lens | ❌ **NOT SHIPPED** |
-| `lib_CO-OX8GB-A121+055-L.so` | CO type, A121 lens | ❌ **NOT SHIPPED** |
-| `lib_CH-OX8GB-A120+065-L.so` | CH type, A120 lens | ❌ **NOT SHIPPED** |
-| `lib_CH-OX8GB-A030+017-L.so` | CH type, A030 lens | ❌ **NOT SHIPPED** |
-
-### 3.4 ISP Calibration Libraries Shipped in hobot-camera 4.0.4
-Only two calibration libraries are included in the package:
-| Library | Sensor | Size |
-|---------|--------|------|
-| `lib_CH_OX3GB_O100_065_L.so` | OVX3C | 78,200 bytes |
-| `lib_CW_A82GB_A120_065_L_W20.so` | AR0820 | 131,120 bytes |
-
-**None of the 7 OVX8B calibration libraries referenced by `libovx8bstd.so` are included.**
-
----
-
-## 4. Device Tree Configuration
-
-### 4.1 Active DTB
-```
-/boot/hobot/rdk-s100-v1p0.dtb  (151,275 bytes)
+/boot/hobot/rdk-s100-v1p0.dtb  (reverted to clean/stock — no MCLK modifications)
 Model: "D-Robotics RDK S100 V1P0"
-Compatible: "drobot,s100-rdk"
 ```
 
-### 4.2 Available DTBs
-```
-rdk-s100-v0p5.dtb    (151,275 bytes)
-rdk-s100-v0p6.dtb    (151,275 bytes)
-rdk-s100-v1-2.dtb    (150,772 bytes)  ← different size, may have camera changes
-rdk-s100-v1-21.dtb   (150,772 bytes)  ← different size, may have camera changes
-rdk-s100-v1p0.dtb    (151,275 bytes)  ← ACTIVE
-rdk-s100p-v0p5.dtb   (151,275 bytes)
-rdk-s100p-v0p6.dtb   (151,275 bytes)
-rdk-s100p-v1p0.dtb   (151,275 bytes)
-```
+### 3.2 VCON (Video Connector) Configuration
 
-### 4.3 VCON (Video Connector) Configuration
 ```dts
 vcon@0 {
     compatible = "hobot,vin-vcon";
-    type = <0x00>;           // NORMAL sensor type
+    type = <0x00>;           // NORMAL sensor type (no deserializer)
     bus = <0x01>;            // I2C bus 1
     rx_phy = <0x01 0x00>;   // MIPI RX PHY 0
     status = "okay";
-    gpio_poc = <0x00>;
-    gpio_des = <0x00>;
-    sensor_err = <0x00>;
     lpwm_chn = <0x00>;
 };
 
@@ -186,14 +218,12 @@ vcon@1 {
     bus = <0x02>;            // I2C bus 2
     rx_phy = <0x01 0x01>;   // MIPI RX PHY 1
     status = "okay";
-    gpio_poc = <0x00>;
-    gpio_des = <0x00>;
-    sensor_err = <0x00>;
     lpwm_chn = <0x01>;
 };
 ```
 
-### 4.4 MIPI Host 0 Configuration
+### 3.3 MIPI Host 0 Configuration (Stock/Clean DTB)
+
 ```dts
 mipi_host@0x37420000 {
     compatible = "hobot,mipi-host";
@@ -201,333 +231,278 @@ mipi_host@0x37420000 {
     interrupts-name = "mipi-rx0";
     hw-mode = <0x01>;
     status = "okay";
-    ports {
-        port@0 {
-            endpoint {
-                clock-lanes = <0x00>;
-                data-lanes = <0x01 0x02>;      // 2 data lanes
-                lane-rate = <0x6c0>;           // 1728 Mbps
-                vc_id = <0x00>;
-                emb-en = <0x01>;               // Embedded data enabled
-            };
-        };
-    };
+    /* NOTE: No clocks, pinctrl-names, pinctrl-0, or snrclk-idx properties */
+    /* This means the SoC cannot output MCLK to the sensor */
 };
 ```
-**NOTE:** No `pinctrl-names` or MCLK pinctrl defined for MIPI host — this causes the "mipi mclk is not configed" warning.
 
-### 4.5 MIPI Host Sysfs State
-```
-/sys/class/vps/mipi_host0/status/cfg = "not inited"
-/sys/class/vps/mipi_host0/param/snrclk_freq = 0
-/sys/class/vps/mipi_host0/param/snrclk_en = 0
-```
+### 3.4 MCLK Pin Conflict (Previous DTB Modification — REVERTED)
+
+A previous attempt added MCLK pinctrl (`cam_clkout_func`, phandle `0xf0`) to mipi_host0 and mipi_host1. **This BROKE both MIPI hosts** because:
+
+- `cam_clkout_func` uses pin `cam_lpwm1_dout3` (pin-7 in the camera pinctrl domain)
+- Pin `cam_lpwm1_dout3` is **already claimed by the Ethernet controller** (`33100000.ethernet`)
+- Kernel error: `s100-pinctrl 370f3000.pinctrl: pin LPWM1_DOUT3 already requested by 33100000.ethernet; cannot claim for 37420000.mipi_host`
+- Result: mipi_host0 and mipi_host1 completely failed to probe (only mipi_host4 remained)
+- **Fix applied: DTB reverted to stock. mipi_host0/1 are now working again.**
 
 ---
 
-## 5. The Error — Detailed Trace
+## 4. The Current Error — Detailed Trace
 
-### 5.1 Error Sequence
+### 4.1 Test Command
+
+```bash
+$ cd /app/multimedia_samples/sample_vin/get_vin_data
+$ sudo ./get_vin_data -s 6    # sensor index 6 = sc230ai-30fps
+```
+
+### 4.2 Console Output
+
+```
+Using index:6  sensor_name:sc230ai-30fps  config_file:linear_1920x1080_raw10_30fps_1lane.c
+mipi mclk is not configed.
+Searching camera sensor on device: /proc/device-tree/soc/vcon@0 i2c bus: 1 mipi rx phy: 0
+mipi rx used phy: 00000000
+INFO: Found sensor_name:sc230ai-30fps on mipi rx csi 0, i2c addr 0x30,
+      config_file:linear_1920x1080_raw10_30fps_1lane.c
+create_and_run_vflow(301) failed, ret -36
+create_and_run_vflow failed for sensor 6. ret = -36
+```
+
+### 4.3 Kernel Log (dmesg) During Test
+
+```
+[SENSOR0]: sc230ai open i2c1@0x30                                    ✅ Sensor driver opened
+[SENSOR0]: camera_tuning_update_param done                            ✅ ISP tuning loaded
+[SENSOR0]: ctrl_mode set to user                                      ✅
+[SENSOR0]: camera_init_result cmd: done wake                          ✅ Sensor initialized
+[SENSOR0]: camera_set_intrinsic_param port 0 done                     ✅
+[SENSOR0]: sensor_attach flow0 ctx0 to sensor0 sc230ai                ✅ Attached to pipeline
+[VCON0]: flow0.ctx0 attach sensor0 done                               ✅
+[RX0]: init cmd: 0 real                                               ✅ MIPI RX init
+[RX0]: 1 lane 1920x1080 30fps datatype 0x2b                           ✅ Config correct
+[RX0]: mclk 24 ignore                                                 ⚠️  MCLK IGNORED (no pinctrl)
+[RX0]: ipiclk limit 48352500 up to 102000000                          ✅
+[RX0]: ipiclk set 102000000 get 600000000                             ✅
+[RX0]: dphy 810Mbps/1lane: ppi 8bit settle 22                         ✅ PHY configured
+[RX0]: ipi config hsa: 8, hbp: 8, hsd: 1                              ✅
+[RX0]: config 1/1 ipi done                                            ✅
+[RX0]: check phy stop state                                           ✅
+[RX0]: init end                                                       ✅ MIPI init complete
+[SENSOR0]: sensor_start sc230ai flow0 start done                      ✅ Sensor started streaming
+[VCON0]: sensor0 start real done                                      ✅
+[RX0]: start cmd: 0 real                                              ✅ MIPI RX started
+[RX0]: check hs reception                                             ⏳ Checking for data...
+[RX0]: hs reception check error 0x10000                               ❌ NO MIPI DATA RECEIVED
+[RX0]: hs reception state error                                       ❌
+[RX0]: start error: -1                                                ❌
+vin_node_start mipi start fail                                        ❌ Pipeline start failed
+```
+
+### 4.4 Error Analysis
+
+| Step | Status | Detail |
+|------|--------|--------|
+| I2C communication | ✅ | Chip ID reads correctly (0xCB34) |
+| Sensor driver load | ✅ | `libsc230ai.so.1.0.0` loaded |
+| ISP calibration load | ✅ | `lib_sc230ai_linear.so` loaded |
+| Sensor initialization | ✅ | All register writes succeed |
+| MIPI RX PHY init | ✅ | 810Mbps, 1 lane, settle=22 |
+| **MCLK output** | ❌ | **`mclk 24 ignore` — SoC cannot provide MCLK** |
+| Sensor streaming start | ✅ | Driver writes streaming register |
+| **MIPI HS reception** | ❌ | **`hs reception check error 0x10000` — No data on MIPI lane** |
+
+**Root Cause: The sensor is told to stream, but the MIPI RX PHY receives no high-speed data. The most likely cause is that the sensor has no MCLK to drive its PLL and generate MIPI output.**
+
+### 4.5 Python API (libsrcampy) — Same Issue
+
 ```python
 from hobot_vio import libsrcampy
 cam = libsrcampy.Camera()
-ret = cam.open_cam(0, 0, 30, 1920, 1080)
-# Returns: -1
+ret = cam.open_cam(0, -1, 30, 1920, 1080)   # Returns -1, detects as "ovx8bstd-30fps"
 ```
 
-### 5.2 Full Console Output
-```
-[CamInitParam][0296] set camera fps: 30, width: -1, height: -1
-mipi mclk is not configed.
-Searching camera sensor on device: /proc/device-tree/soc/vcon@0  i2c bus: 1  mipi rx phy: 0
-[0] INFO: Found sensor name:ovx8bstd-30fps on mipi rx csi 0, i2c addr 0x30,
-    config_file:linear_1920x1080_raw12_30fps_1lane.c
-[CamInitPymParam][0259] Setting PYM channel:0: crop_x:0, crop_y:0,
-    input_width:1920, input_height:1080, dst_w:1920, dst_h:1080
-ERROR [vp_vin_init][0042] hbn_camera_create failed, ret(-65666)
-ERROR [OpenCamera][0422] vp_vin_init failed error(-65666)
-```
+**Note:** The `libhbspdev.so` library (used by `libsrcampy`) does NOT include SC230AI in its compiled sensor list. It only has `imx219`, `ar0820std`, and `ovx8bstd`. The OVX8B config's wildcard `chip_id=0xA55A` matches any sensor, so it catches the SC230AI before the correct driver can match.
 
-### 5.3 Error Code Analysis
-| Error Code | Hex | Constant | Meaning |
-|-----------|-----|----------|---------|
-| -65665 | 0x10081 | `HBN_STATUS_CAM_MOD_DLOPEN_ERROR` | Calibration .so file not found (initial error before stub) |
-| **-65666** | **0x10082** | **`HBN_STATUS_CAM_MOD_CHECK_ERROR`** | **Calibration .so loaded but validation FAILED** (current error) |
-| -65667 | 0x10083 | `HBN_STATUS_CAM_MOD_VERSION_ERROR` | Calibration version mismatch |
-
-**Error progression:**
-1. Initially: `-65665` (`DLOPEN_ERROR`) — the ISP calibration library `lib_CL_OX8GB_L121_067_L.so` did not exist at all
-2. We created a stub library with correct symbol but zeroed data → error changed to `-65666` (`CHECK_ERROR`)
-3. We created a structured stub with name/magic/version → still `-65666` (`CHECK_ERROR`)
-4. The calibration data format is proprietary and cannot be easily stubbed
-
-### 5.4 Strace dlopen() Trace
-```
-# Sensor driver loads successfully:
-openat("/usr/hobot/lib/sensor/libovx8bstd.so", O_RDONLY|O_CLOEXEC) = 8   ✅
-
-# Then it tries to dlopen the ISP calibration library:
-openat("/usr/lib/aarch64-linux-gnu/lib_CL_OX8GB_L121_067_L.so") = ENOENT  ❌
-openat("/lib/aarch64-linux-gnu/lib_CL_OX8GB_L121_067_L.so")     = ENOENT  ❌
-openat("/usr/hobot/lib/sensor/lib_CL_OX8GB_L121_067_L.so")      = 8       ✅ (our stub)
-
-# Stub loads, but camera_calib_config_check() fails → ret(-65666)
-```
-
-### 5.5 Calibration Validation (Disassembly of camera_calib_config_check)
-From disassembling `libcam.so`, `camera_calib_config_check()` validates:
-1. Loads calibration struct pointer from `cammod_ovx8bstd[120]` (byte offset)
-2. Checks magic number `0x4863616d` ("macH") at byte offset 100 within the calibration structure
-3. Checks version field at byte offset 104 — (`value >> 16) & 0xFF` must equal `1`
-4. Loads additional data pointers from byte offset 184
-
-The `cammod_calibration` exported symbol in the calib .so has 32 bytes containing 4 pointers (64-bit) to:
-- Name string (108 bytes, CAMERA_MODULE_NAME_LEN)
-- Version/magic struct
-- Calibration operations vtable
-- ISP tuning data (large binary blob, ~60-120 KB)
-
-**The ISP tuning data is a proprietary binary blob specific to each lens+sensor module combination. It cannot be stubbed or fabricated.**
+The C sample `get_vin_data` has the full sensor list including SC230AI (index 6) and correctly detects it.
 
 ---
 
-## 6. What We've Tried
+## 5. Why OVX8B Was Previously Misidentified
 
-### 6.1 Attempted Fixes — All Failed
-| Attempt | Result |
-|---------|--------|
-| `open_cam(0, 0, 30, 1920, 1080)` | ERROR -65665 (no calib .so) |
-| `open_cam(0, -1, 30, 1920, 1080)` (auto-detect) | ERROR -65665 |
-| `open_cam(0, 0, 30, 640, 480)` (lower resolution) | ERROR -65665 |
-| `open_cam(0, 0, 30, -1, -1)` (native resolution) | ERROR -65665 + PYM invalid |
-| `open_cam(0, 0, 15, 1920, 1080)` (lower FPS) | Sensor not found at 15fps |
-| Run with `sudo` | Same error |
-| Set `MCLK` env variable | No effect |
-| Created zeroed stub `lib_CL_OX8GB_L121_067_L.so` with `cammod_calibration` symbol | ERROR changed to -65666 (check fail) |
-| Created structured stub with name/magic/version fields | ERROR -65666 (check fail) |
-| Tried `video_idx=1` (second camera on bus 2) | Same error |
+The sensor auto-detection works by iterating through a compiled list of sensor configs and checking each sensor's chip ID:
 
-### 6.2 MCLK Issue
-The device tree does not define MCLK pinctrl for the MIPI hosts:
-- `"mipi mclk is not configed"` warning appears on every attempt
-- The vcon nodes have no `pinctrl-names` property
-- MIPI host sysfs shows `snrclk_freq = 0` and `snrclk_en = 0`
-- Attempting to write to sysfs (`echo 24000000 > .../snrclk_freq`) returns **I/O error**
-- This may be because the DIP switch SW2200 is set to LPWM instead of MCLK
-- However, the OVX8B sensor IS detected on I2C (so it has some clock), and the error occurs AFTER detection
-
----
-
-## 7. Root Cause Analysis
-
-### 7.1 Primary Cause — Missing ISP Calibration Library
-The `hobot-camera 4.0.4` package **does not include any OVX8B ISP calibration libraries**. It only ships calibrations for OVX3C and AR0820. The sensor driver `libovx8bstd.so` requires a calibration library matching the camera module (determined by EEPROM data), but none of the 7 possible OVX8B calibration .so files are included.
-
-### 7.2 Secondary Cause — MCLK Not Configured
-The device tree lacks MCLK pinctrl configuration for the MIPI hosts. This generates the `"mipi mclk is not configed"` warning. While the sensor is still detectable via I2C, the camera may need MCLK to actually stream data. The DIP switch SW2200 on the Camera Expansion Board controls whether the pin is used for MCLK or LPWM.
-
-### 7.3 Calibration Library Format
-The ISP calibration library exports a single symbol `cammod_calibration` (32 bytes) which contains 4 pointers to:
-1. **Module name** — 108-byte string identifying the lens module (e.g., "CL_OX8GB_L121_067_L")
-2. **Version struct** — Contains magic "macH" (`0x4863616d`), version numbers, and flags
-3. **Ops vtable** — Calibration operation function pointers
-4. **ISP tuning data** — Large proprietary binary blob (60-120 KB) with:
-   - Auto white balance (AWB) parameters
-   - Auto exposure (AE) tables
-   - Color correction matrices (CCM)
-   - Lens shading correction (LSC) tables
-   - Noise reduction parameters
-   - Gamma curves
-   - Sensor-specific timing/register configurations
-
-This data is sensor+lens module specific and **cannot be fabricated**.
-
----
-
-## 8. VIN/ISP Device Nodes Present
-```
-/dev/vin0_cap    /dev/vin0_src    /dev/vin0_emb    /dev/vin0_roi
-/dev/vin1_cap    /dev/vin1_src    /dev/vin1_emb    /dev/vin1_roi
-/dev/vin4_cap    /dev/vin4_src    /dev/vin4_emb    /dev/vin4_roi
-/dev/isp0_cap    /dev/isp0_src    /dev/isp_hw0_control[0-11]   /dev/isp_hw0_sbuf[0-11]
-/dev/isp1_cap    /dev/isp1_src    /dev/isp_hw1_control[0-11]   /dev/isp_hw1_sbuf[0-11]
+```c
+// From vp_sensors.c — sensor detection logic
+if (sensor_config->chip_id == 0xA55A ||   // WILDCARD — matches ANY sensor
+    ((chip_id & 0xFF) == (sensor_config->chip_id >> 8 & 0xFF)) ||
+    ((chip_id & 0xFF) == (sensor_config->chip_id & 0xFF))) {
+    return addr;  // Sensor "matched"
+}
 ```
 
----
-
-## 9. Questions for D-Robotics / RDK Community
-
-1. **Where are the OVX8B ISP calibration libraries?** The `hobot-camera` package (v4.0.4) ships `libovx8bstd.so` sensor driver but none of the 7 calibration .so files it references (`lib_CL-OX8GB-*.so`, `lib_CW-OX8GB-*.so`, etc.). Is there a separate package, an OTA update, or a download location for these?
-
-2. **Is MCLK required for the OVX8B on the Camera Expansion Board?** The device tree has no MCLK pinctrl, and `snrclk_freq/snrclk_en` sysfs writes fail with I/O error. Should DIP switch SW2200 be set to MCLK? Does the OVX8B use an external oscillator or does it need the SoC-provided MCLK?
-
-3. **Which camera modules are officially supported on the RDK S100 Camera Expansion Board?** The documentation mentions SC132GS and SC230AI. Is the OVX8B officially supported, or does it require a different expansion board?
-
-4. **Is there a way to bypass ISP calibration for raw capture?** Can the camera pipeline be initialized without the calibration library (e.g., raw sensor data capture, bypassing ISP)?
-
-5. **Are the `rdk-s100-v1-2.dtb` or `rdk-s100-v1-21.dtb` DTBs meant for the Camera Expansion Board?** They are 503 bytes smaller than the v1p0 DTB — do they include different MIPI/MCLK pinctrl or camera support?
-
----
-
-## 10. File Tree (Relevant Paths)
+The `libhbspdev.so` sensor list:
 ```
-/usr/hobot/lib/
-├── libcam.so.1.2.0                    # Camera framework library
-├── libvpf.so.1                        # Video Processing Framework
-├── libvio.so.1                        # Video I/O library
-├── libhbmem.so.1                      # Memory management
-└── sensor/
-    ├── libovx8bstd.so → libovx8bstd.so.1.2.0    # OVX8B sensor driver (156 KB)
-    ├── libovx8b.so → libovx8b.so.1.2.0          # OVX8B alt driver (132 KB)
-    ├── lib_CH_OX3GB_O100_065_L.so                # OVX3C ISP calib (78 KB) ✅
-    ├── lib_CW_A82GB_A120_065_L_W20.so            # AR0820 ISP calib (131 KB) ✅
-    ├── lib_CL_OX8GB_L121_067_L.so                # OVX8B ISP calib STUB (8 KB) ❌ doesn't work
-    ├── libsc132gs.so.1.0.0                       # SC132GS driver
-    ├── libsc230ai.so.1.0.0                       # SC230AI driver
-    ├── libimx219.so.1.0.0                        # IMX219 driver
-    └── ... (30+ other sensor drivers)
+0: imx219        (chip_id_reg=0x0000, chip_id=0x0219)
+1: ar0820std     (chip_id_reg=0x3000, chip_id=0x0A20)
+2: ovx8bstd      (chip_id_reg=0x0000, chip_id=0xA55A)  ← WILDCARD!
+```
 
-/boot/hobot/
-├── rdk-s100-v1p0.dtb                  # Active device tree blob
-├── rdk-s100-v1-2.dtb                  # Alt DTB (smaller, may differ)
-└── rdk-s100-v1-21.dtb                 # Alt DTB (smaller, may differ)
+Since **SC230AI is not in this list**, the wildcard OVX8B entry matches first. The OVX8B driver then fails because:
+1. It tries to load `lib_CL_OX8GB_L121_067_L.so` (OVX8B-specific ISP calibration) — doesn't exist
+2. Error: `hbn_camera_create failed, ret(-65666)` (CHECK_ERROR)
 
-/usr/hobot/include/
-├── hbn_error.h                        # Error code definitions
-├── hb_camera_error.h                  # Camera-specific errors
-├── hb_camera_data_config.h            # camera_config_t structure
-└── hb_camera_interface.h              # Camera API
+The `get_vin_data` sample has the full list (including SC230AI at index 6), and properly detects it using `chip_id_reg=0x3107, chip_id=0xcb34`.
+
+---
+
+## 6. The MCLK Problem
+
+### 6.1 Current State
+
+The SC230AI sensor config requests `mclk = 24` (24 MHz). The MIPI host driver logs `[RX0]: mclk 24 ignore` because:
+
+1. The stock DTB has **no clock or pinctrl properties** on mipi_host0/1
+2. Without `clocks`, `clock-names`, `pinctrl-names`, `pinctrl-0`, and `snrclk-idx` in the DTB, the driver **cannot enable MCLK output** from the SoC
+3. The only available `cam_clkout_func` pinctrl uses pin `cam_lpwm1_dout3`, which is **already claimed by the Ethernet controller**
+4. Writing to `/sys/class/vps/mipi_host0/param/snrclk_freq` returns **I/O error** (no clock provider)
+
+### 6.2 Key Question: Does SC230AI Need External MCLK?
+
+**Evidence FOR the sensor having MCLK already:**
+- Both sensors respond to I2C with correct chip ID → they have power and some clock
+- The official DIP switch setting is SW2200=LPWM (not MCLK) → D-Robotics docs say LPWM, not MCLK
+- I2C communication works without any MCLK configuration
+
+**Evidence AGAINST:**
+- MIPI HS reception completely fails → sensor may only have power for I2C, not enough clock for MIPI streaming
+- The sensor config explicitly requests `mclk = 24`
+- SC230AI datasheet specifies 6-27 MHz external MCLK input
+- The `mclk 24 ignore` message suggests the framework knows MCLK is needed but can't provide it
+
+### 6.3 Possible MCLK Sources
+
+| Source | Pin/Method | Status |
+|--------|-----------|--------|
+| SoC `cam_clkout` | Pin `cam_lpwm1_dout3` | ❌ Conflicts with Ethernet on S100 |
+| SoC alternative pin | Unknown | ❓ No other `cam_clkout` pinctrl defined in DTB |
+| Camera module oscillator | Onboard crystal | ❓ Unknown if present on this module |
+| Expansion board oscillator | Pin 5 of MIPI connector | ❓ SW2200=LPWM sends LPWM signal, not clock |
+| DIP SW2200 → MCLK position | Pin 5 = SoC MCLK output | ⚠️ But SoC still needs DTB config to output clock |
+
+### 6.4 Failed DTB Modification Attempt
+
+Previous attempt to add MCLK support to DTB:
+```dts
+/* Added to mipi_host@0x37420000 — CAUSED PROBE FAILURE */
+clocks = <0x6f>;           /* cam0_dummy_clk — fixed 24MHz */
+clock-names = "snrclk";
+pinctrl-names = "default";
+pinctrl-0 = <0xf0>;        /* cam_clkout_func — uses cam_lpwm1_dout3 */
+snrclk-idx = <0x00>;
+```
+
+**Result:** Pin conflict destroyed mipi_host0/1 probe. Reverted.
+
+---
+
+## 7. What Has Been Tried
+
+| # | Attempt | Result |
+|---|---------|--------|
+| 1 | `open_cam(0, -1, 30, 1920, 1080)` via libsrcampy | ❌ Detects as OVX8B (wildcard), fails -65666 |
+| 2 | `open_cam(0, 0, 30, 1920, 1080)` via libsrcampy | ❌ Same OVX8B mismatch, fails -65665/-65666 |
+| 3 | Created OVX8B ISP calibration stub | ❌ Proprietary binary format, can't be faked |
+| 4 | `get_vin_data -s 6` (SC230AI index) | ✅ Correct detection! But ❌ MIPI HS reception error |
+| 5 | DTB mod: add MCLK pinctrl to mipi_host0/1 | ❌ Pin conflict with Ethernet, broke mipi_host0/1 |
+| 6 | DTB reverted to stock | ✅ mipi_host0/1 restored |
+| 7 | Write to sysfs `snrclk_freq` / `snrclk_en` | ❌ I/O error (no clock provider in DTB) |
+| 8 | Verified DIP switches at default (LPWM + 3.3V) | ✅ Matches official SC230AI docs |
+
+---
+
+## 8. Current System State (After All Fixes)
+
+| Component | State |
+|-----------|-------|
+| DTB | ✅ Stock/clean (no MCLK mod) |
+| mipi_host0 | ✅ Probed, available in sysfs |
+| mipi_host1 | ✅ Probed, available in sysfs |
+| SC230AI left sensor | ✅ Detected on I2C bus 1, addr 0x30, chip_id=0xCB34 |
+| SC230AI right sensor | ✅ Detected on I2C bus 2, addr 0x32, chip_id=0xCB34 |
+| SC230AI sensor driver | ✅ Loaded, initializes sensor successfully |
+| SC230AI ISP calibration | ✅ `lib_sc230ai_linear.so` present and loads |
+| MCLK from SoC | ❌ Cannot be provided (no DTB config, pin conflict) |
+| MIPI data reception | ❌ `hs reception check error 0x10000` |
+| libsrcampy SC230AI | ❌ Not in compiled sensor list (only OVX8B wildcard) |
+| `get_vin_data -s 6` | ✅ Detects SC230AI correctly, but pipeline fails at MIPI start |
+
+---
+
+## 9. Questions for Expert / D-Robotics Community
+
+1. **How does the SC230AI stereo camera module receive MCLK on the RDK S100 Camera Expansion Board?**
+   - The only `cam_clkout` pinctrl in the DTB uses a pin (`cam_lpwm1_dout3`) that's claimed by Ethernet
+   - DIP SW2200 is set to LPWM (official setting), not MCLK
+   - Does the camera module have an onboard oscillator?
+   - Is there a different SoC pin that can provide MCLK without conflicting with Ethernet?
+
+2. **Is there a working DTB or overlay for SC230AI on the RDK S100 Camera Expansion Board?**
+   - The stock `rdk-s100-v1p0.dtb` has no MCLK configuration for mipi_host0/1
+   - Are `rdk-s100-v1-2.dtb` or `rdk-s100-v1-21.dtb` (which are smaller — 150,772 bytes vs 151,259 bytes) meant for the camera expansion board?
+
+3. **Why is `cam_lpwm1_dout3` shared between `cam_clkout_func` and the Ethernet controller?**
+   - Is this a DTB bug or intentional design?
+   - Can the Ethernet controller use a different pin?
+
+4. **Why is SC230AI missing from the `libhbspdev.so` sensor list (used by libsrcampy)?**
+   - The C sample `get_vin_data` includes it, but the Python API doesn't
+   - Can `libhbspdev.so` be rebuilt with SC230AI, or is there an updated package?
+
+5. **Can the `mclk = 24` be set to `mclk = 0` in the sensor config to skip MCLK configuration?**
+   - If the camera module has its own oscillator, the SoC shouldn't need to output MCLK
+   - Would this change the `mclk 24 ignore` behavior and allow MIPI to work?
+
+---
+
+## 10. Relevant File Paths
+
+```
+/usr/hobot/lib/sensor/
+├── libsc230ai.so → libsc230ai.so.1.0.0       # SC230AI sensor driver (24 KB) ✅
+├── lib_sc230ai_linear.so                       # SC230AI ISP calibration (77 KB) ✅
+├── libovx8bstd.so → libovx8bstd.so.1.2.0     # OVX8B sensor driver (156 KB)
+├── libovx8b.so → libovx8b.so.1.2.0           # OVX8B alt driver (132 KB)
+└── ... (30+ other sensor drivers)
 
 /app/multimedia_samples/
-├── sample_vin/get_vin_data/           # C sample for VIN data capture
-├── vp_sensors/vp_sensors.c            # Sensor auto-detection code
-└── sunrise_camera/                    # Full camera demo app
+├── vp_sensors/
+│   ├── sc230ai/linear_1920x1080_raw10_30fps_1lane.c   # SC230AI config ✅
+│   ├── ovx8bstd/linear_1920x1080_raw12_30fps_1lane.c  # OVX8B config (wrong sensor)
+│   └── vp_sensors.c                                    # Sensor list & detection logic
+├── sample_vin/get_vin_data/get_vin_data                # Working binary with SC230AI
+└── sunrise_camera/                                     # WebSocket camera app
 
-/sys/class/vps/
-├── mipi_host0/param/snrclk_freq       # Sensor clock frequency (= 0)
-├── mipi_host0/param/snrclk_en         # Sensor clock enable (= 0)
-├── mipi_host0/status/cfg              # "not inited"
-├── mipi_host1/                        # Second MIPI host
-└── mipi_host4/                        # Third MIPI host (for GMSL)
+/app/tuning_tool/cfg/matrix/
+├── tuning_sc230ai_dual_cim_isp_1080p/                  # Official dual SC230AI tuning config ✅
+│   ├── hb_j6dev.json                                   # Sensor addresses & calibration
+│   ├── mipi.json                                       # MIPI lane config
+│   ├── vpm_config.json                                 # Full pipeline config
+│   └── lpwm_30fps.json                                 # LPWM timing config
+└── tuning_sc230ai_cim_isp_1080p/                       # Single SC230AI config
+
+/boot/hobot/rdk-s100-v1p0.dtb                           # Active DTB (stock, no MCLK)
+
+/usr/local/lib/python3.10/dist-packages/hobot_vio/
+├── libsrcampy.so                                       # Python camera wrapper
+└── libhbspdev.so                                       # Sensor detection (missing SC230AI!)
 ```
 
 ---
 
 ## 11. Summary
 
-| Component | Status |
-|-----------|--------|
-| Camera Expansion Board power (D2000 LED) | ✅ GREEN |
-| OVX8B Sensor #1 detected on I2C bus 1 (addr 0x30) | ✅ FOUND |
-| OVX8B Sensor #2 detected on I2C bus 2 (addr 0x32) | ✅ FOUND |
-| Sensor driver `libovx8bstd.so` loaded | ✅ OK |
-| Sensor auto-detection (name, config_file) | ✅ OK |
-| MIPI MCLK configured | ⚠️ WARNING "not configed" |
-| ISP calibration library `lib_CL_OX8GB_L121_067_L.so` | ❌ **NOT SHIPPED** in hobot-camera |
-| `hbn_camera_create()` | ❌ **FAILS** with -65666 (CHECK_ERROR) |
-| Camera pipeline (VIN → ISP → PYM) | ❌ **BLOCKED** |
-| Image capture | ❌ **BLOCKED** |
+The RDK Stereo Camera Module contains **SC230AI** sensors (chip ID `0xCB34`), not OVX8B. All software components for SC230AI (sensor driver, ISP calibration, tuning configs) are present on the system. The SC230AI sensor initializes correctly and is properly detected by the C sample programs.
 
-**The camera hardware is correctly connected and both sensors are detected on I2C.**
-
----
-
-## UPDATE — Root Cause Analysis (Detailed Investigation)
-
-### Root Cause: Missing MCLK (Master Clock)
-
-After extensive investigation including reverse engineering of `libcam.so`, `libovx8bstd.so`, kernel module analysis, and multiple driver bypass approaches, the **definitive root cause** has been identified:
-
-**The OVX8B sensor has NO MCLK (24MHz master clock) reaching it.**
-
-#### Evidence:
-1. **Chip ID reads as 0x00** — `get_vin_data -s 8` reports "Expected Chip ID: 0x858, Actual Chip ID Read: 0x00". Without MCLK, the sensor ACKs on I2C bus (basic presence detection) but cannot respond to register reads.
-2. **MIPI host snrclk "not support"** — `/sys/class/vps/mipi_host0/status/snrclk` reports "not support". Writing to `snrclk_en` causes I/O error.
-3. **No pinctrl for MCLK in DTB** — None of the three MIPI host nodes (`mipi_host@0x37420000`, `@0x37620000`, `@0x37C20000`) have `pinctrl-names`, `pinctrl-0`, or `clocks` properties. Without these, the driver cannot generate a sensor clock.
-4. **Framework confirms** — `vp_sensor_mipi_host_mclk_is_not_configed()` checks for `pinctrl-names` in MIPI host DT node and prints "mipi mclk is not configed" for both vcon@0 and vcon@1.
-5. **Sensor driver init fails** — `hbn_camera_attach_to_vin` returns -65672 (CAM_SENSOR_OP_ERROR). `/dev/i2c-1` is opened, timeout set, but NO I2C_SLAVE or I2C_RDWR ioctls are executed — the error occurs before any actual sensor communication.
-
-### Error Progression (from investigation):
-```
--65665 (DLOPEN)     → calibration .so not found
--65666 (CHECK)      → module validation failed (bypassed via CAM_MODULE_NOCHECK)
--65674 (DESERIAL)   → deserializer attach failed (bypassed via SENSOR_TYPE_NORMAL)
--65672 (SENSOR_OP)  → sensor init fails (ROOT CAUSE: no MCLK)
-```
-
-### Key Discoveries:
-- **`CAM_MODULE_NOCHECK`** env var (rodata 0x631c0 in libcam.so) — bypasses `camera_module_full_check()` in `camera_module_lib_pre` at 0x2d0e4
-- **`CAM_CALVER_NOCHECK`** env var (rodata 0x69028 in libcam.so) — bypasses calibration version check in `camera_calib_config_check` at 0x39668
-- **Custom env system** — libcam.so uses `camera_env_set_bool()`/`camera_env_get_bool()`, NOT standard `getenv()`
-- **Kernel detection** — `hobot_sensor.ko` (51MB) detects "ovx8bstd-30fps" at kernel level; userspace driver swap cannot override this
-- **cammod struct** — 256+ bytes: name@0x00, "macH" magic@0x64, version@0x68, ops vtable@0xB8, calibration ptrs@0xC0/0xC8
-- **cam_clkout_func** — pinctrl node (phandle 0xf0) exists in DTB at `pinctrl@370f3000`, muxes `cam_lpwm1_dout3` as clock output
-- **cam0_dummy_clk** — fixed 24MHz clock (phandle 0x6f) exists in DTB but is not referenced by any MIPI host
-
----
-
-## Required Fix: DIP Switch + DTB Modification
-
-### Step 1: Physical DIP Switch Change (REQUIRED)
-On the Camera Expansion Board:
-
-| Switch | Current Setting | Required Setting | Purpose |
-|--------|----------------|-----------------|---------|
-| **SW2200** (both) | LPWM (default) | **MCLK** | Routes 24MHz crystal oscillator to camera MCLK pin |
-| **SW2201** (both) | 3.3V (default) | **1.8V** | OVX8B uses 1.8V DOVDD; MIPI D-PHY is inherently 1.8V |
-
-The Camera Expansion Board has an on-board 24MHz active crystal oscillator. SW2200 selects whether MCLK or LPWM reaches Pin 5 of the MIPI connectors. Without MCLK, the OVX8B sensor cannot operate.
-
-### Step 2: DTB Modification (RECOMMENDED)
-A modified DTB has been prepared at `/tmp/rdk-s100-v1p0-mclk.dtb` that adds MCLK support to both MIPI hosts:
-
-**Changes to mipi_host@0x37420000 and mipi_host@0x37620000:**
-```dts
-clocks = <&cam0_dummy_clk>;     /* 24MHz fixed clock, phandle 0x6f */
-clock-names = "snrclk";
-pinctrl-names = "default";
-pinctrl-0 = <&cam_clkout>;      /* cam_lpwm1_dout3 as clock out, phandle 0xf0 */
-snrclk-idx = <0x00>;
-```
-
-**To install:**
-```bash
-# Backup original DTB
-sudo cp /boot/hobot/rdk-s100-v1p0.dtb /boot/hobot/rdk-s100-v1p0.dtb.bak
-
-# Install modified DTB
-sudo cp /tmp/rdk-s100-v1p0-mclk.dtb /boot/hobot/rdk-s100-v1p0.dtb
-
-# Reboot
-sudo reboot
-```
-
-**To revert:**
-```bash
-sudo cp /boot/hobot/rdk-s100-v1p0.dtb.bak /boot/hobot/rdk-s100-v1p0.dtb
-sudo reboot
-```
-
-### Step 3: Test After Reboot
-```bash
-# Test with custom sensor config (sensor index 8, chip_id wildcard)
-sudo LD_PRELOAD=/tmp/set_env_preload.so ./get_vin_data -s 8
-
-# Or test with standalone program
-cd /tmp && sudo ./ovx8b_vin_test
-```
-
----
-
-## Files Created During Investigation
-
-| File | Purpose |
-|------|---------|
-| `/tmp/ovx8b_vin_test.c` | Standalone VIN capture test (compiled, uses libovx8bstd.so) |
-| `/tmp/ovx8b_test2` | Same test using libovx8b.so (crashes — struct layout different) |
-| `/tmp/set_env_preload.so` | LD_PRELOAD library to set CAM_MODULE_NOCHECK + CAM_CALVER_NOCHECK |
-| `/tmp/rdk-s100-v1p0-mclk.dtb` | Modified DTB with MCLK support for mipi_host0 and mipi_host1 |
-| `/tmp/modified.dts` | Source DTS for the modified DTB |
-| `/app/multimedia_samples/vp_sensors/ovx8bstd/` | Custom sensor config (SENSOR_TYPE_NORMAL, chip_id=0xA55A) |
-| `/usr/hobot/lib/sensor/lib_CL_OX8GB_L121_067_L.so` | Calibration stub (proper 4-pointer format) |
-| `/tmp/sensor_backup/` | Backup of original sensor driver files |
+**The single remaining blocker is MIPI HS reception failure.** The most likely cause is that the sensor cannot output MIPI data because it has no MCLK. The SoC's only `cam_clkout` pin conflicts with the Ethernet controller, and the stock DTB has no MCLK configuration for the MIPI hosts. The official DIP switch documentation says SC230AI should use LPWM (not MCLK), which suggests either (a) the camera module has its own oscillator that should provide MCLK, or (b) there is a DTB configuration we're missing that enables MCLK through a different mechanism.
