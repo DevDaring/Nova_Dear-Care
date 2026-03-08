@@ -532,6 +532,7 @@ class GuidedFlow:
         try:
             from sensor_handler import SensorHandler
             sh = SensorHandler()
+            sh.max30102.connect()
             readings = sh.read_vitals(duration=15)
 
             spo2 = readings.get("spo2")
@@ -566,7 +567,8 @@ class GuidedFlow:
         try:
             from sensor_handler import SensorHandler
             sh = SensorHandler()
-            readings = sh.read_all()
+            sh.bme280.connect()
+            readings = sh.read_all(vitals_duration=0)
 
             temp = readings.get("temperature")
             pressure = readings.get("pressure")

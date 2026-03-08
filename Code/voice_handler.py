@@ -261,7 +261,10 @@ def _try_pyttsx3(text: str, output_path: str) -> bool:
 
 def speech_to_text(audio_path: str) -> Tuple[str, float]:
     """Transcribe audio. Returns (text, confidence). Tries Transcribe Streaming then free fallback."""
-    print("  [Processing speech...]", flush=True)
+    try:
+        print("  [Processing speech...]", flush=True)
+    except BrokenPipeError:
+        pass
     t0 = time.time()
     text, conf = _try_transcribe_stt(audio_path)
     if text:
@@ -314,11 +317,9 @@ def _try_transcribe_stt(audio_path: str) -> Tuple[str, float]:
             handler = Handler(stream.output_stream)
 
             # Stream audio chunks with throttling to simulate near-real-time
-            # (Transcribe Streaming drops audio if sent too fast in bulk)
-            chunk_size = 8192
-            # Calculate real-time rate: 16kHz * 2 bytes = 32KB/s
-            # Send at ~4x real-time → ~8KB every ~31ms
-            send_interval = chunk_size / (16000 * 2 * 4)  # ~0.064s per 8KB chunk
+            # Send at 2x real-time to be safe (32KB/s real-time, send at 64KB/s)
+            chunk_size = 16384  # 16KB chunks
+            send_interval = chunk_size / (16000 * 2 * 2)  # ~0.256s per 16KB
             for i in range(0, len(audio_data), chunk_size):
                 chunk = audio_data[i:i + chunk_size]
                 await stream.input_stream.send_audio_event(audio_chunk=chunk)
@@ -332,7 +333,10 @@ def _try_transcribe_stt(audio_path: str) -> Tuple[str, float]:
         try:
             loop.run_until_complete(_stream())
         finally:
-            loop.close()
+            try:
+                loop.close()
+            except Exception:
+                pass
 
         text = " ".join(final_transcript).strip()
         if text:
@@ -340,6 +344,9 @@ def _try_transcribe_stt(audio_path: str) -> Tuple[str, float]:
             return text, 0.92
         return "", 0.0
 
+    except BrokenPipeError:
+        _logger().warning("[STT] Transcribe Streaming: Broken pipe (connection reset)")
+        return "", 0.0
     except Exception as e:
         _logger().warning("[STT] Transcribe Streaming error: %s", e)
         return "", 0.0
