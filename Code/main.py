@@ -92,14 +92,14 @@ class PocketAsha:
         try:
             from voice_handler import check_audio_devices
             devs = check_audio_devices()
-            if devs.get("jabra_capture"):
-                print("[INIT] Microphone: Jabra ready")
+            if devs.get("mic"):
+                print("[INIT] Microphone: Ready")
             else:
-                print("[INIT] Microphone: Jabra not found")
-            if devs.get("bluetooth_sink"):
-                print("[INIT] Speaker: Bluetooth ready")
+                print("[INIT] Microphone: Not found")
+            if devs.get("speaker"):
+                print(f"[INIT] Speaker: Ready")
             else:
-                print("[INIT] Speaker: Using default")
+                print("[INIT] Speaker: Not found")
         except Exception as e:
             print(f"[INIT] Audio check: {e}")
 

@@ -1,7 +1,7 @@
 # Pocket ASHA — AI-Powered Healthcare Assistant for Rural India
 
 > **AWS Hackathon: AI for Bharat** | Team: DevDaring  
-> Platform: D-Robotics RDK S100 (Ubuntu 22.04, ARM64)
+> Platform: D-Robotics RDK S100 V1P0 (Ubuntu 22.04.5, ARM64, 4GB RAM)
 
 ---
 
@@ -9,14 +9,15 @@
 
 India has over 1 million ASHA (Accredited Social Health Activist) workers serving rural communities with limited access to doctors, diagnostic tools, and connectivity. These frontline workers need a portable, intelligent assistant that:
 
-- Works **offline-first** in areas with no internet
 - Reads **prescriptions** in multiple Indian languages
 - Measures **vital signs** (SpO2, heart rate, temperature)
-- Performs **clinical triage** on-device
+- Performs **clinical triage** using AI
+- Supports **voice interaction** in local languages (English, Hindi, Bengali)
+- Uses **Aadhaar-based** patient identification for continuity of care
 - Syncs data to the **cloud** when connectivity is available
-- Supports **voice interaction** in local languages
+- Falls back to **offline** operation when internet is unavailable
 
-**Pocket ASHA** solves this by running on an edge AI device (RDK S100) with AWS cloud services for enhanced capabilities when online.
+**Pocket ASHA** solves this by running on an edge AI device (RDK S100) with **AWS services as the primary intelligence layer** and offline fallbacks for every capability.
 
 ---
 
@@ -25,30 +26,38 @@ India has over 1 million ASHA (Accredited Social Health Activist) workers servin
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                      POCKET ASHA DEVICE                      │
-│                     (RDK S100 Edge AI)                        │
+│              RDK S100 V1P0 (ARM64, Ubuntu 22.04)             │
 │                                                              │
 │  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌────────────┐ │
-│  │  Camera   │  │  Jabra   │  │ MAX30102  │  │  BME280    │ │
-│  │  (MIPI)   │  │  Mic     │  │ SpO2/HR   │  │ Temp/Hum   │ │
+│  │ SC230AI  │  │  Jabra   │  │ MAX30102  │  │  BMP280    │ │
+│  │  Camera  │  │EVOLVE 20 │  │ SpO2/HR   │  │ Temp/Press │ │
+│  │  (MIPI)  │  │ (USB)    │  │ (I2C:5)   │  │ (I2C:5)    │ │
 │  └─────┬─────┘  └────┬─────┘  └─────┬─────┘  └─────┬──────┘ │
 │        │              │              │              │         │
 │  ┌─────▼──────────────▼──────────────▼──────────────▼──────┐ │
-│  │              Python Application Layer                    │ │
+│  │             Guided Flow Orchestrator                     │ │
+│  │                                                          │ │
+│  │  Language → Wake Word → Aadhaar → Health Inquiry →      │ │
+│  │  Prescription Loop → Pulse Sensor → Environment →       │ │
+│  │  AI Analysis → Save & Next Patient                      │ │
+│  │                                                          │ │
 │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐ │ │
 │  │  │  OCR     │ │  Intent  │ │  Triage  │ │  Encounter │ │ │
-│  │  │PaddleOCR │ │ Handler  │ │  Engine  │ │  Manager   │ │ │
+│  │  │Textract+ │ │ Bedrock+ │ │  Engine  │ │  Manager   │ │ │
+│  │  │PaddleOCR │ │ Keywords │ │          │ │ (Aadhaar)  │ │ │
 │  │  └──────────┘ └──────────┘ └──────────┘ └────────────┘ │ │
 │  └──────────────────────┬──────────────────────────────────┘ │
 │                         │                                     │
 └─────────────────────────┼─────────────────────────────────────┘
-                          │ (when online)
+                          │ AWS Primary (offline fallback)
                           ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                      AWS CLOUD SERVICES                      │
+│                   AWS CLOUD SERVICES                         │
 │                                                              │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────┐  │
 │  │ Bedrock  │  │  Polly   │  │Transcribe│  │  Textract  │  │
-│  │Nova Lite │  │  (TTS)   │  │  (STT)   │  │   (OCR)    │  │
+│  │Nova Lite │  │  Kajal   │  │  (STT)   │  │   (OCR)    │  │
+│  │ (LLM)   │  │  Neural  │  │  en/hi/bn│  │            │  │
 │  └──────────┘  └──────────┘  └──────────┘  └────────────┘  │
 │                                                              │
 │  ┌──────────┐  ┌──────────┐                                 │
@@ -62,51 +71,55 @@ India has over 1 million ASHA (Accredited Social Health Activist) workers servin
 
 ## Key Features
 
-### 1. Offline-First Healthcare Triage
-- Rule-based clinical triage engine runs **entirely on-device** in under 10 seconds
-- Classifies patients as **URGENT**, **FOLLOW_UP**, or **ROUTINE**
-- Uses clinically validated thresholds (SpO2 < 94% → urgent, HR > 120 → urgent, Temp > 39.5°C → urgent)
-- No internet required for life-saving assessments
+### 1. AWS-First Intelligence Layer
+- **Amazon Bedrock Nova Lite** powers ALL AI tasks: intent classification, Aadhaar extraction from speech, health analysis, prescription analysis, patient triage
+- Every AWS call has an **offline fallback** (keyword matching, regex, PaddleOCR, pyttsx3, SpeechRecognition)
+- Every fallback event is **logged** with the reason (e.g., `[INTENT] FALLBACK: keyword matching — Bedrock unavailable: no internet`)
 
-### 2. Prescription & Document Reading (OCR)
-- **Offline:** PaddleOCR (2.7.0) runs locally on the device
-- **Online:** Amazon Textract for higher accuracy
-- Auto-selects best available engine based on connectivity
-- Extracts medicine names, dosages, and timing from prescriptions
+### 2. Guided Healthcare Flow
+- **Structured encounter** — not freeform commands  
+- Flow: **Language Selection** → **Wake Word** → **Aadhaar Collection** → **Patient Lookup** → **Health Inquiry** → **Prescription Capture Loop** → **Pulse Reading** → **Environment Sensors** → **Final AI Analysis** → **Save & Next Patient**
+- Aadhaar-based patient registry using CSV database for continuity of care
 
-### 3. Voice-First Interface
-- Wake word activated: "Hello Asha", "Ok Asha", "Hey Asha"
-- **Online TTS:** Amazon Polly (neural voice "Kajal" for Hindi/English)
-- **Offline TTS:** pyttsx3 engine as fallback
-- **Online STT:** Amazon Transcribe (en-IN)
-- **Offline STT:** SpeechRecognition (Google free tier / CMU Sphinx)
-- Supports **11 Indian languages**: English, Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada, Malayalam, Odia, Punjabi
+### 3. Prescription & Document Reading (OCR)
+- **Primary:** Amazon Textract — high-accuracy cloud OCR
+- **Fallback:** PaddleOCR 2.7.0 — runs locally on device
+- Bedrock Nova Lite analyzes extracted text: medicine names, dosages, timing, key findings
+- Prescription capture loop — scan multiple pages until patient says "no more"
 
-### 4. Vital Signs Monitoring
-- **MAX30102** pulse oximeter: SpO2 percentage and heart rate (BPM)
-- **BME280** environmental sensor: Body temperature, humidity, pressure
-- Graceful degradation — works without sensors, activates when connected
+### 4. Voice-First Interface
+- Wake word activated: **"Hello Asha"**, **"Ok Asha"**, **"Hey Asha"**, or just **"Asha"**
+- **Primary TTS:** Amazon Polly (neural voice "Kajal" — supports English & Hindi)
+- **Fallback TTS:** pyttsx3 offline engine
+- **Primary STT:** Amazon Transcribe (en-IN, hi-IN, bn-IN)
+- **Fallback STT:** SpeechRecognition (Google free tier)
+- Supports **English**, **Hindi**, and **Bengali** for the guided flow
+
+### 5. Vital Signs Monitoring
+- **MAX30102** pulse oximeter on I2C Bus 5, Addr 0x57: SpO2 % and heart rate (BPM)
+- **BMP280** environmental sensor on I2C Bus 5, Addr 0x76: ambient temperature and barometric pressure
+- 3-attempt retry for pulse sensor with voice prompts ("Place your finger on the sensor")
 - 15-second measurement window with confidence scoring
 
-### 5. AI-Powered Health Assistance
-- Amazon Bedrock with **Nova Lite** model for health Q&A
-- Prescription analysis and medicine extraction
-- AI triage review via AWS Lambda
-- Multi-turn conversational context with chat history
+### 6. AI Health Analysis
+- **Final consolidated analysis** via Bedrock Nova Lite combining: symptoms, prescription data, vital signs, and environmental data
+- Per-encounter AI triage assessment: URGENT / FOLLOW_UP / ROUTINE
+- Medicine extraction returned as structured JSON
+- Conversational health Q&A with chat history
 
-### 6. Patient Encounter Workflow
-- Full state machine: Demographics → Photo → Vitals → Audio → Triage → OCR → Review → Complete
-- Steps are **skippable** — flexible workflow for field conditions
-- Per-encounter folders with photos, audio recordings, and clinical data
-- CSV database + JSON encounter files for local storage
+### 7. Patient Encounter Workflow
+- Aadhaar-based patient identification (12-digit Verhoeff validation)
+- CSV database with per-encounter folders for photos, audio, and clinical data
+- State machine: IDLE → DEMOGRAPHICS → PHOTO → VITALS → AUDIO → TRIAGE → OCR → REVIEW → COMPLETE
+- Steps are **skippable** for flexible field conditions
 
-### 7. Cloud Sync & Clinical Notes
+### 8. Cloud Sync & Clinical Notes
 - Background sync thread (60-second intervals)
 - Uploads complete encounter data to **Amazon S3**
 - **AWS Lambda** generates structured clinical notes via Bedrock
 - Handles intermittent connectivity gracefully
 
-### 8. Security & Privacy
+### 9. Security & Privacy
 - PIN-based authentication (SHA-256 with salt)
 - AES-256-GCM encryption for patient data files
 - 30-day data retention policy with automatic cleanup
@@ -117,170 +130,214 @@ India has over 1 million ASHA (Accredited Social Health Activist) workers servin
 
 ## AWS Services Used
 
-| Service | Purpose | Online/Offline |
-|---------|---------|---------------|
-| **Amazon Bedrock** (Nova Lite v1:0) | LLM for health Q&A, prescription analysis, triage assessment | Online only |
-| **Amazon Polly** | Text-to-Speech in Indian languages (neural voice "Kajal") | Online (pyttsx3 offline fallback) |
-| **Amazon Transcribe** | Speech-to-Text in Indian English (en-IN) | Online (SpeechRecognition offline fallback) |
-| **Amazon Textract** | High-accuracy document OCR | Online (PaddleOCR offline fallback) |
-| **Amazon S3** | Cloud storage for encounter data, photos, audio, clinical notes | Online (local CSV offline) |
-| **AWS Lambda** | Serverless clinical notes generation and triage review | Online only |
-| **AWS IAM** | Role-based access control for Lambda execution | Infrastructure |
+| Service | Purpose | Fallback |
+|---------|---------|----------|
+| **Amazon Bedrock** (Nova Lite v1:0) | Intent classification, Aadhaar extraction, health Q&A, prescription analysis, triage, final analysis | Keyword matching (intent), regex (Aadhaar) |
+| **Amazon Polly** (Kajal neural) | Text-to-Speech in English (en-IN) and Hindi (hi-IN) | pyttsx3 offline engine |
+| **Amazon Transcribe** | Speech-to-Text in en-IN, hi-IN, bn-IN | SpeechRecognition (Google free tier) |
+| **Amazon Textract** | High-accuracy document/prescription OCR | PaddleOCR 2.7.0 (on-device) |
+| **Amazon S3** | Cloud storage for encounters, photos, audio, clinical notes | Local CSV + JSON files |
+| **AWS Lambda** | Serverless clinical notes generation | Not applicable (online only) |
+| **AWS IAM** | Role-based access control for all services | Not applicable |
+
+> **Design Principle:** AWS is **always tried first**. If it fails, the fallback is used and the event is logged.
 
 ---
 
 ## AI & ML Technologies
 
-| Technology | Usage | Runs On |
-|------------|-------|---------|
-| **Amazon Nova Lite** (Bedrock) | Conversational health assistant, prescription analysis, medicine extraction, triage assessment | Cloud |
-| **PaddleOCR 2.7.0** | Offline text extraction from prescriptions and medical documents | Device (CPU) |
-| **PaddlePaddle XPU 2.6.1** | Deep learning inference engine for OCR models | Device |
-| **Custom Triage Engine** | Rule-based clinical assessment using vital sign thresholds | Device |
-| **Intent Classifier** | Keyword-based NLU with 14 intent categories | Device |
-| **pyttsx3** | Offline text-to-speech synthesis | Device |
-| **SpeechRecognition** | Offline/free speech-to-text | Device |
+| Technology | Usage | Runs On | Role |
+|------------|-------|---------|------|
+| **Amazon Nova Lite** (Bedrock) | Intent classification, Aadhaar extraction, health Q&A, prescription analysis, consolidated health analysis | Cloud | **Primary** |
+| **Amazon Textract** | Prescription and document OCR | Cloud | **Primary** |
+| **PaddleOCR 2.7.0** | Offline text extraction from prescriptions | Device (CPU) | **Fallback** |
+| **PaddlePaddle XPU 2.6.1** | Deep learning inference engine for OCR | Device | **Fallback** |
+| **Custom Triage Engine** | Rule-based clinical assessment using vital sign thresholds | Device | Offline safety net |
+| **pyttsx3** | Offline text-to-speech synthesis | Device | **Fallback** |
+| **SpeechRecognition** | Offline/free speech-to-text | Device | **Fallback** |
 
 ---
 
-## Hardware Requirements
+## Hardware
 
 | Component | Model | Connection | Purpose |
 |-----------|-------|-----------|---------|
-| **Edge AI Board** | D-Robotics RDK S100 | — | Main compute (ARM64, 4GB+ RAM) |
-| **Camera** | MIPI Stereo Camera | MIPI CSI | Prescription/document capture |
-| **Microphone** | Jabra USB Speakerphone | USB (hw:1,0) | Voice input |
-| **Speaker** | Bose Bluetooth Speaker | Bluetooth A2DP | Voice output |
-| **Pulse Oximeter** | MAX30102 | I2C Bus 1, Addr 0x57 | SpO2 and heart rate |
-| **Environment Sensor** | BME280 | I2C Bus 1, Addr 0x76 | Temperature, humidity, pressure |
+| **Edge AI Board** | D-Robotics RDK S100 V1P0 | — | Main compute (ARM64, 4GB RAM, Ubuntu 22.04) |
+| **Camera** | SC230AI MIPI Camera | MIPI CSI (sensor index 6) | Prescription/document capture |
+| **Headset** | Jabra EVOLVE 20 MS | USB (ALSA card 1, `plughw:1,0`) | Microphone + Speaker (bidirectional audio) |
+| **Pulse Oximeter** | MAX30102 | I2C Bus 5, Addr 0x57 | SpO2 and heart rate measurement |
+| **Environment Sensor** | BMP280 (chip ID 0x58) | I2C Bus 5, Addr 0x76 | Ambient temperature and barometric pressure |
 
-> **Note:** The system works without sensors — they activate automatically when connected.
+> **Note:** The system works without sensors — they activate automatically when connected.  
+> **Note:** BMP280 is used (not BME280) — humidity reads 0% and is excluded from measurements.
 
 ---
 
 ## Project Structure
 
 ```
-Code/
-├── main.py                 # Entry point — PocketAsha class, main loop
-├── config.py               # Central configuration, .env loading, constants
-├── utils.py                # Logging, connectivity check, memory management
-├── security.py             # PIN authentication, AES-256 encryption
-├── storage_manager.py      # CSV database, encounter folders, cleanup
-├── sensor_handler.py       # MAX30102 + BME280 I2C sensor drivers
-├── camera_handler.py       # MIPI stereo camera capture (hobot_vio)
-├── language_handler.py     # 11 Indian language mappings for Polly/Transcribe
-├── voice_handler.py        # Audio recording, Polly TTS, Transcribe STT
-├── intent_handler.py       # 14-intent keyword classifier
-├── ocr_handler.py          # PaddleOCR (offline) + Textract (online)
-├── aws_handler.py          # Bedrock LLM, S3, Lambda integration
-├── triage_engine.py        # Rule-based clinical triage (offline)
-├── encounter_manager.py    # Patient encounter state machine
-├── sync_manager.py         # Background S3 sync thread
-├── requirements.txt        # Python dependencies
-├── env.template            # .env file template
-├── deploy_lambda.sh        # Lambda deployment script (AWS CLI)
-├── .env                    # Credentials (not committed)
-├── lambda/
-│   └── handler.py          # AWS Lambda function for clinical notes
-├── Sensors_Test/
-│   └── test_all_sensors.py # Hardware diagnostic tool
-├── data/
-│   └── encounters/         # Local encounter storage (auto-created)
-├── temp/                   # Temporary files (auto-created)
-├── audio/                  # Audio recordings (auto-created)
-└── logs/                   # Application logs (auto-created)
+AI_4_Bharat/
+├── Code/
+│   ├── main.py                 # Entry point — PocketAsha class, GuidedFlow launcher
+│   ├── guided_flow.py          # Guided healthcare encounter orchestrator
+│   ├── config.py               # Central config, prompts, CSV schema, .env loading
+│   ├── utils.py                # Logging, connectivity check, memory management
+│   ├── security.py             # PIN authentication, AES-256 encryption
+│   ├── storage_manager.py      # CSV database, encounter folders, Aadhaar lookup
+│   ├── sensor_handler.py       # MAX30102 + BMP280 I2C sensor drivers (Bus 5)
+│   ├── camera_handler.py       # SC230AI MIPI camera capture (get_vin_data)
+│   ├── language_handler.py     # Language mappings for Polly/Transcribe
+│   ├── voice_handler.py        # Audio recording (Jabra), Polly TTS, Transcribe STT
+│   ├── intent_handler.py       # Bedrock LLM intent classifier (keyword fallback)
+│   ├── ocr_handler.py          # Textract (primary) + PaddleOCR (fallback)
+│   ├── aws_handler.py          # Bedrock LLM, S3, Lambda, Textract integration
+│   ├── triage_engine.py        # Rule-based clinical triage (offline)
+│   ├── encounter_manager.py    # Patient encounter state machine (with Aadhaar)
+│   ├── sync_manager.py         # Background S3 sync thread
+│   ├── requirements.txt        # Python dependencies
+│   ├── env.template            # .env file template
+│   ├── deploy_lambda.sh        # Lambda deployment script (AWS CLI)
+│   ├── .env                    # AWS credentials (not committed)
+│   ├── Sensor_Setup_Guide.md   # Detailed hardware setup documentation
+│   ├── lambda/
+│   │   └── handler.py          # AWS Lambda function for clinical notes
+│   ├── Sensors_Test/
+│   │   ├── test_all_sensors.py     # Full hardware diagnostic
+│   │   ├── test_pulse_sensor.py    # MAX30102 standalone test
+│   │   └── test_temp_and_pulse.py  # Combined BMP280 + MAX30102 test
+│   ├── data/
+│   │   └── encounters/         # Local encounter storage + encounters.csv
+│   ├── temp/                   # Temporary audio/image files (auto-created)
+│   ├── audio/                  # Audio recordings (auto-created)
+│   └── logs/                   # Application logs (auto-created)
+├── RDK_S100_Guide.md           # Board documentation
+├── RDK_System_Info.md          # System specifications
+├── Camera_Expansion_Guide.md   # Camera setup reference
+└── doc.md                      # UI flowchart (Mermaid)
 ```
 
 ---
 
-## Quick Start Guide
+## Guided Healthcare Flow
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    POCKET ASHA FLOW                      │
+│                                                         │
+│  1. LANGUAGE SELECTION                                  │
+│     "Press 1 for English, 2 for Hindi, 3 for Bengali"  │
+│                       ▼                                 │
+│  2. WAKE WORD DETECTION                                 │
+│     Say "Hello Asha" / "Ok Asha" / "Hey Asha"          │
+│                       ▼                                 │
+│  3. AADHAAR COLLECTION                                  │
+│     "Please tell me your 12-digit Aadhaar number"       │
+│     → Bedrock extracts digits from speech               │
+│     → Read back for confirmation                        │
+│     → Verhoeff checksum validation                      │
+│                       ▼                                 │
+│  4. PATIENT LOOKUP                                      │
+│     CSV search by Aadhaar → welcome back / new patient  │
+│     New: collect name, age, gender                      │
+│                       ▼                                 │
+│  5. HEALTH INQUIRY                                      │
+│     "What health problem are you facing today?"         │
+│     → Store symptoms in encounter                       │
+│                       ▼                                 │
+│  6. PRESCRIPTION CAPTURE LOOP                           │
+│     "Do you have a prescription to show?"               │
+│     → Yes: Camera capture → Textract OCR → Bedrock      │
+│       analysis → "Any more prescriptions?"              │
+│     → No: proceed to sensors                            │
+│                       ▼                                 │
+│  7. PULSE READING (MAX30102)                            │
+│     "Place your finger on the sensor"                   │
+│     → 3 attempts max, 15s each                          │
+│     → SpO2 % + Heart Rate BPM                          │
+│                       ▼                                 │
+│  8. ENVIRONMENT (BMP280)                                │
+│     → Ambient temperature + barometric pressure         │
+│                       ▼                                 │
+│  9. FINAL AI ANALYSIS (Bedrock Nova Lite)               │
+│     → Consolidated assessment: symptoms + vitals +      │
+│       prescriptions + environment data                  │
+│     → Triage classification + recommendations           │
+│                       ▼                                 │
+│  10. SAVE & NEXT PATIENT                                │
+│      → Save encounter (CSV + JSON + media files)        │
+│      → Speak summary → return to Step 2 (wake word)     │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Quick Start
 
 ### Prerequisites
-- RDK S100 board running Ubuntu 22.04 (ARM64)
+- RDK S100 V1P0 board running Ubuntu 22.04 (ARM64)
 - Python 3.10+
-- AWS account with Bedrock, Polly, Transcribe, S3, Lambda access
-- Jabra USB microphone connected
-- Bose Bluetooth speaker paired
+- AWS account with Bedrock (Nova Lite enabled), Polly, Transcribe, Textract, S3, Lambda access
+- Jabra EVOLVE 20 MS USB headset connected
 
-### Step 1: Clone the Repository
+### Step 1: Clone & Install
 
 ```bash
 git clone https://github.com/DevDaring/AI_4_Bharat.git
 cd AI_4_Bharat
-```
 
-### Step 2: Install Dependencies
-
-```bash
 # System packages
 sudo apt update
 sudo apt install -y python3-pip python3-dev portaudio19-dev \
     libasound2-dev libpulse-dev i2c-tools fonts-freefont-ttf
 
-# Python packages (system-wide, no venv)
+# Python packages
 pip3 install -r Code/requirements.txt
-
-# Pin critical versions for ARM64 compatibility
 pip3 install numpy==1.26.4 opencv-python==4.6.0.66
 ```
 
-### Step 3: Configure AWS
-
-```bash
-# Configure AWS CLI
-aws configure
-# Enter: Access Key ID, Secret Access Key, Region (us-east-1), Output (json)
-
-# Create S3 bucket
-aws s3 mb s3://pocket-asha-data-YOUR_ACCOUNT_ID --region us-east-1
-```
-
-### Step 4: Set Up Environment
+### Step 2: Configure AWS
 
 ```bash
 cd Code
 cp env.template .env
-# Edit .env with your actual credentials:
 nano .env
 ```
 
 Fill in:
 - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+- `AWS_REGION` (default: `us-east-1`)
 - `AWS_ACCOUNT_ID`
-- `S3_BUCKET_NAME` (e.g., `pocket-asha-data-123456789012`)
-- `BOSE_SINK` — find with: `pactl list sinks short | grep bluez`
+- `S3_BUCKET_NAME` (e.g., `pocket-asha-data-343104031497`)
 
-### Step 5: Deploy Lambda Function
+### Step 3: Deploy Lambda (Optional)
 
 ```bash
 bash deploy_lambda.sh
 ```
 
-This automatically:
-1. Creates IAM role with S3 + Bedrock + Lambda permissions
-2. Packages and deploys the clinical notes Lambda function
-3. Runs a test invocation
-
-### Step 6: Test Hardware (Optional)
+### Step 4: Verify Hardware (Optional)
 
 ```bash
-cd Code
-env -u LD_LIBRARY_PATH -u LD_PRELOAD python3 Sensors_Test/test_all_sensors.py
+# Check I2C sensors on Bus 5
+sudo i2cdetect -y -r 5
+# Expected: 0x57 (MAX30102) and 0x76 (BMP280)
+
+# Check Jabra headset
+arecord -l
+# Expected: card 1: Jabra EVOLVE 20 MS
+
+# Run full diagnostic
+env -u LD_LIBRARY_PATH -u LD_PRELOAD python3 Sensors_Test/test_temp_and_pulse.py
 ```
 
-This checks all sensors, camera, microphone, speaker, and AWS connectivity.
-
-### Step 7: Run Pocket ASHA
+### Step 5: Run Pocket ASHA
 
 ```bash
 cd ~/Documents/AI_4_Bharat/Code
 env -u LD_LIBRARY_PATH -u LD_PRELOAD python3 main.py
 ```
 
-> **Note:** The MIPI camera is accessed directly via `hobot_vio` (libsrcampy) — no separate camera launch step needed. Just ensure the MIPI cable is connected.
-
-**Text-only mode** (no microphone/speaker needed):
+**Text-only mode** (no headset needed):
 ```bash
 env -u LD_LIBRARY_PATH -u LD_PRELOAD python3 main.py --text
 ```
@@ -289,71 +346,25 @@ env -u LD_LIBRARY_PATH -u LD_PRELOAD python3 main.py --text
 
 ---
 
-## Usage Guide
-
-### Voice Commands
-
-| Say This | What Happens |
-|----------|-------------|
-| "Hello Asha, start new patient" | Begins a patient encounter |
-| "Hello Asha, take a picture" | Captures prescription/document photo |
-| "Hello Asha, read my prescription" | Captures + OCR + AI analysis |
-| "Hello Asha, check my vitals" | Measures SpO2, heart rate, temperature |
-| "Hello Asha, record cough" | Records symptom audio |
-| "Hello Asha, I have a headache" | AI health consultation |
-| "Hello Asha, sync data" | Uploads pending encounters to cloud |
-| "Hello Asha, change language to Hindi" | Switches voice language |
-| "Hello Asha, help" | Lists available commands |
-| "Hello Asha, goodbye" | Ends session |
-
-### Patient Encounter Workflow
-
-```
-1. "Start new patient"
-   └─→ Asha asks for name, age, gender
-
-2. "Take a picture" (of prescription)
-   └─→ Captures photo, runs OCR, analyzes medicines
-
-3. "Check vitals"
-   └─→ Reads SpO2, heart rate, temperature from sensors
-
-4. "Record cough"
-   └─→ Records 10-second audio sample
-
-5. Automatic triage assessment
-   └─→ URGENT / FOLLOW_UP / ROUTINE classification
-
-6. "Yes" to confirm and save
-   └─→ Encounter stored locally, queued for sync
-
-7. "Sync data" (when internet available)
-   └─→ Uploads to S3, Lambda generates clinical notes
-```
-
-### Text Input Mode
-
-When running with `--text`, type commands directly at the prompt. All voice commands work as text input too. Text input always takes priority over voice when both are available.
-
----
-
 ## Offline vs Online Capabilities
 
-| Feature | Offline | Online |
-|---------|---------|--------|
-| Wake word detection | Local keyword match | Same |
-| Intent classification | Keyword scoring | Same |
-| OCR (prescription reading) | PaddleOCR | Amazon Textract |
-| Text-to-Speech | pyttsx3 | Amazon Polly (neural) |
-| Speech-to-Text | SpeechRecognition | Amazon Transcribe |
-| Clinical triage | Rule-based engine | Same + AI review |
-| Health Q&A | Not available | Amazon Bedrock (Nova Lite) |
-| Patient data storage | Local CSV + JSON | S3 cloud sync |
-| Clinical notes | Not available | Lambda + Bedrock |
-| Vital signs | Same (on-device) | Same |
-| Camera capture | Same (on-device) | Same |
+| Feature | Online (AWS Primary) | Offline (Fallback) |
+|---------|---------------------|-------------------|
+| Intent classification | **Amazon Bedrock** Nova Lite | Keyword scoring |
+| Aadhaar extraction | **Amazon Bedrock** Nova Lite | Regex pattern matching |
+| OCR (prescriptions) | **Amazon Textract** | PaddleOCR (on-device) |
+| Text-to-Speech | **Amazon Polly** (Kajal neural) | pyttsx3 |
+| Speech-to-Text | **Amazon Transcribe** | SpeechRecognition |
+| Health Q&A | **Amazon Bedrock** Nova Lite | Not available |
+| Prescription analysis | **Amazon Bedrock** Nova Lite | OCR text only |
+| Final health analysis | **Amazon Bedrock** Nova Lite | Rule-based triage |
+| Clinical triage | **Amazon Bedrock** + rule engine | Rule-based engine |
+| Patient data storage | **Amazon S3** cloud sync | Local CSV + JSON |
+| Clinical notes | **AWS Lambda** + Bedrock | Not available |
+| Vital signs | Same (on-device sensors) | Same |
+| Camera capture | Same (on-device MIPI) | Same |
 
-> All critical features (triage, vitals, OCR, recording) work **completely offline**. Cloud services enhance accuracy and add AI capabilities when available.
+> **Design:** AWS is **always tried first**. Every fallback is **logged** with the failure reason.
 
 ---
 
@@ -375,15 +386,7 @@ Urgent symptom keywords: chest pain, breathing difficulty, unconscious, seizure,
 |----------|------|-------------|--------|------------|
 | English | en | Kajal | Neural | en-IN |
 | Hindi | hi | Kajal | Neural | hi-IN |
-| Bengali | bn | Aditi | Standard | bn-IN |
-| Tamil | ta | Aditi | Standard | ta-IN |
-| Telugu | te | Aditi | Standard | te-IN |
-| Marathi | mr | Aditi | Standard | mr-IN |
-| Gujarati | gu | Aditi | Standard | gu-IN |
-| Kannada | kn | Aditi | Standard | kn-IN |
-| Malayalam | ml | Aditi | Standard | ml-IN |
-| Odia | or | Aditi | Standard | or-IN |
-| Punjabi | pa | Aditi | Standard | pa-IN |
+| Bengali | bn | — (pyttsx3 fallback) | — | bn-IN |
 
 ---
 
@@ -394,7 +397,6 @@ Urgent symptom keywords: chest pain, breathing difficulty, unconscious, seizure,
 - **Credential Isolation:** All secrets in `.env` file, excluded from Git via `.gitignore`
 - **Data Retention:** Automatic cleanup of encounters older than 30 days
 - **Capacity Limits:** Maximum 100 offline encounters to prevent storage overflow
-- **No Service Disruption:** All security features are additive — authentication failure does not crash any service or prevent emergency use
 - **AWS IAM:** Least-privilege role for Lambda with only S3, Bedrock, and CloudWatch access
 - **No Hardcoded Secrets:** All API keys, tokens, and passwords loaded from environment variables
 
@@ -406,41 +408,18 @@ Urgent symptom keywords: chest pain, breathing difficulty, unconscious, seizure,
 |-------|---------|
 | PaddleOCR crashes with `SIGSEGV` | Use `env -u LD_LIBRARY_PATH -u LD_PRELOAD` prefix |
 | "Jabra not found" | Check USB connection: `arecord -l` |
-| "Bluetooth speaker not found" | Re-pair: `bluetoothctl connect XX:XX:XX:XX:XX:XX` |
-| Camera not available | Check MIPI cable connection; run sensor diagnostic |
+| Camera not available | Check MIPI cable; verify with `get_vin_data -s 6` |
 | "No internet" but WiFi connected | Check DNS: `ping s3.amazonaws.com` |
-| Sensors not detected | Check I2C: `sudo i2cdetect -y 1` |
+| Sensors not detected | Check I2C Bus 5: `sudo i2cdetect -y -r 5` |
 | NumPy version error | Re-pin: `pip3 install numpy==1.26.4` |
-| Bedrock access denied | Enable Nova Lite model access in AWS Console → Bedrock → Model access |
-| Lambda deployment fails | Check AWS CLI config: `aws sts get-caller-identity` |
+| Bedrock access denied | Enable Nova Lite model in AWS Console → Bedrock → Model access |
+| Lambda deployment fails | Check AWS CLI: `aws sts get-caller-identity` |
 | Out of memory | Close other apps; OCR auto-unloads after use |
+| BMP280 humidity reads 0% | Expected — BMP280 has no humidity sensor (only temp+pressure) |
 
 ---
 
-## Development
-
-### Adding a New Sensor
-
-1. Create a class in `sensor_handler.py` with `connect()`, `read()`, `close()` methods
-2. Add I2C address to `config.py`
-3. Update `SensorHandler.detect_sensors()` and `read_all()`
-4. Add test in `Sensors_Test/test_all_sensors.py`
-
-### Adding a New Language
-
-1. Add language entry to `LANGUAGES` dict in `language_handler.py`
-2. Add keyword to `LANGUAGE_KEYWORDS` in `config.py`
-
-### Adding a New Intent
-
-1. Add value to `Intent` enum in `intent_handler.py`
-2. Add keywords list to `config.py`
-3. Add to `_KEYWORD_MAP` in `intent_handler.py`
-4. Handle in `process_command()` in `main.py`
-
----
-
-## API / Environment Variables
+## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -450,7 +429,6 @@ Urgent symptom keywords: chest pain, breathing difficulty, unconscious, seizure,
 | `AWS_ACCOUNT_ID` | Yes | 12-digit AWS account number |
 | `S3_BUCKET_NAME` | Yes | S3 bucket for data sync |
 | `LAMBDA_FUNCTION_NAME` | No | Lambda function name (default: `pocket-asha-clinical-notes`) |
-| `BOSE_SINK` | No | PulseAudio Bluetooth sink name |
 | `ASHA_PIN_HASH` | No | Pre-set PIN hash for authentication |
 | `AWS_BEARER_TOKEN_BEDROCK` | No | Bearer token for Bedrock access |
 
