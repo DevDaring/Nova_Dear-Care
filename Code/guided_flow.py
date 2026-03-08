@@ -211,7 +211,19 @@ class GuidedFlow:
                 if self._confirm(f"I heard Aadhaar number {masked}. Is that correct?"):
                     self.aadhaar = aadhaar
                     self.enc.data["aadhaar_number"] = aadhaar
-                    self._speak("Aadhaar recorded.")
+                    # Ask for patient name along with Aadhaar on first visit
+                    self._speak("Aadhaar recorded. Please tell me the patient's name.")
+                    name_resp = self._listen(duration=8)
+                    if name_resp:
+                        # Clean up name — take words that look like a name
+                        import re as _re
+                        name_words = [w for w in name_resp.split()
+                                      if _re.sub(r'[^a-zA-Z]', '', w)]
+                        patient_name = " ".join(name_words[:3]).strip()
+                        if patient_name:
+                            self.enc.data["patient_name"] = patient_name
+                            self._speak(f"Thank you. Registered {patient_name} with Aadhaar {masked}.")
+                            _logger().info("[GF] Name '%s' stored with Aadhaar", patient_name)
                     return
                 else:
                     self._speak("Let me try again.")
@@ -234,12 +246,18 @@ class GuidedFlow:
             name = existing.get("patient_name", "")
             age = existing.get("age", "")
             gender = existing.get("gender", "")
-            self._speak(f"I found a previous record for {name}, age {age}.")
-            if self._confirm("Is this the same patient?"):
+            if name:
+                self._speak(f"Welcome back, {name}! I found your previous records.")
                 self.enc.set_demographics(name=name, age=age, gender=gender)
                 self.enc.data["aadhaar_number"] = self.aadhaar
-                _logger().info("[GF] Patient matched from previous encounter: %s", name)
+                _logger().info("[GF] Returning patient auto-matched: %s", name)
                 return
+
+        # First visit or no name on record — check if name was already collected with Aadhaar
+        if self.enc.data.get("patient_name"):
+            _logger().info("[GF] New patient, name already collected with Aadhaar")
+            self._collect_demographics_remaining()
+            return
 
         self._collect_demographics()
 
@@ -257,6 +275,22 @@ class GuidedFlow:
             self._speak(f"Registered {name}.")
         else:
             self._speak("No demographics captured. Continuing.")
+
+    def _collect_demographics_remaining(self):
+        """Collect age and gender when name was already captured with Aadhaar."""
+        name = self.enc.data.get("patient_name", "")
+        self._speak(f"I have the name {name}. Please tell me the patient's age and gender.")
+        resp = self._listen(duration=8)
+        if resp:
+            info = self.enc.parse_demographics(resp)
+            self.enc.set_demographics(
+                name=name,
+                age=info.get("age", ""),
+                gender=info.get("gender", ""),
+            )
+            self._speak(f"Details updated for {name}.")
+        else:
+            self._speak(f"Continuing with {name}.")
 
     # --- Stage 5: Health Inquiry ---
 
@@ -455,7 +489,23 @@ class GuidedFlow:
             self._speak(msg + " Syncing data now.")
             result = self.sync.sync_now()
             if result.get("synced", 0) > 0:
-                self._speak("Data synced to the cloud successfully.")
+                # Confirm what was uploaded
+                updated_parts = []
+                if int(summary.get("photo_count", 0)) > 0:
+                    updated_parts.append("prescriptions")
+                if summary.get("spo2") or summary.get("heart_rate"):
+                    updated_parts.append("pulse and oxygen readings")
+                if summary.get("temperature"):
+                    updated_parts.append("temperature")
+                if summary.get("notes"):
+                    updated_parts.append("health notes")
+
+                if updated_parts:
+                    items = ", ".join(updated_parts)
+                    self._speak(f"Data synced successfully. {patient}'s {items} have been updated in the database.")
+                else:
+                    self._speak("Data synced to the cloud successfully.")
+
                 # Trigger Lambda for clinical notes + health summary
                 try:
                     from aws_handler import invoke_lambda
