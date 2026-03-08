@@ -225,7 +225,8 @@ class GuidedFlow:
     # --- Stage 3: Collect Aadhaar ---
 
     def _collect_aadhaar(self):
-        self._speak("Please tell me the patient's 12-digit Aadhaar number. Take your time.")
+        self._speak("Please tell me the patient's 12-digit Aadhaar number. "
+                     "Say all 12 digits clearly, without pausing.")
         for attempt in range(3):
             resp = self._listen(duration=15)
             if not resp:
@@ -250,6 +251,37 @@ class GuidedFlow:
                 if len(digits) == 12:
                     aadhaar = digits
                     _logger().info("[GF] Aadhaar extracted via regex: %s...%s", aadhaar[:4], aadhaar[-4:])
+
+            # If we got some digits but not 12, try SpeechRecognition for a second opinion
+            # on the SAME audio file (don't re-record)
+            if not aadhaar:
+                digits_found = re.sub(r"\D", "", resp)
+                if len(digits_found) >= 4:
+                    _logger().info("[GF] Got %d digits ('%s'), trying SpeechRecognition for second opinion",
+                                   len(digits_found), digits_found)
+                    try:
+                        from voice_handler import _try_speech_recognition
+                        from config import TEMP_AUDIO_INPUT
+                        text2, _ = _try_speech_recognition(str(TEMP_AUDIO_INPUT))
+                        if text2:
+                            digits2 = re.sub(r"\D", "", text2)
+                            if len(digits2) == 12:
+                                aadhaar = digits2
+                                _logger().info("[GF] Aadhaar from SpeechRecognition fallback: %s...%s",
+                                               aadhaar[:4], aadhaar[-4:])
+                            elif check_internet():
+                                aadhaar2 = ""
+                                try:
+                                    from aws_handler import extract_aadhaar_llm
+                                    aadhaar2 = extract_aadhaar_llm(text2)
+                                except Exception:
+                                    pass
+                                if aadhaar2:
+                                    aadhaar = aadhaar2
+                                    _logger().info("[GF] Aadhaar from SpeechRecognition+Bedrock: %s...%s",
+                                                   aadhaar[:4], aadhaar[-4:])
+                    except Exception as e:
+                        _logger().warning("[GF] SpeechRecognition second opinion failed: %s", e)
 
             if aadhaar:
                 masked = aadhaar[:4] + " **** " + aadhaar[-4:]

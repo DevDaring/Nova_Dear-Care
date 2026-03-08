@@ -101,6 +101,12 @@ def record_audio(output_path: str, duration: int = 7, device: str = None, beep: 
     if beep:
         _play_beep()
     _release_audio_device()
+    # Delete stale audio file to prevent reuse if recording fails
+    try:
+        if os.path.exists(output_path):
+            os.remove(output_path)
+    except OSError:
+        pass
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     for attempt in range(2):
@@ -260,7 +266,9 @@ def _try_pyttsx3(text: str, output_path: str) -> bool:
 # ============================================================
 
 def speech_to_text(audio_path: str) -> Tuple[str, float]:
-    """Transcribe audio. Returns (text, confidence). Tries Transcribe Streaming then free fallback."""
+    """Transcribe audio. Returns (text, confidence). Tries Transcribe Streaming first,
+    then SpeechRecognition. If Transcribe returns a suspiciously short result,
+    also tries SpeechRecognition and picks the longer transcript."""
     try:
         print("  [Processing speech...]", flush=True)
     except BrokenPipeError:
@@ -268,6 +276,15 @@ def speech_to_text(audio_path: str) -> Tuple[str, float]:
     t0 = time.time()
     text, conf = _try_transcribe_stt(audio_path)
     if text:
+        # If Transcribe returned very short text (< 4 words), also try SpeechRecognition
+        # to catch truncation issues
+        word_count = len(text.split())
+        if word_count < 4:
+            _logger().info("[STT] Transcribe result short (%d words), trying SpeechRecognition too", word_count)
+            text2, conf2 = _try_speech_recognition(audio_path)
+            if text2 and len(text2) > len(text):
+                _logger().info("[STT] SpeechRecognition returned longer result, using it")
+                text, conf = text2, conf2
         _logger().info("[STT] Completed in %.1fs", time.time() - t0)
         return text, conf
     text, conf = _try_speech_recognition(audio_path)
@@ -316,10 +333,11 @@ def _try_transcribe_stt(audio_path: str) -> Tuple[str, float]:
             )
             handler = Handler(stream.output_stream)
 
-            # Stream audio chunks with throttling to simulate near-real-time
-            # Send at 2x real-time to be safe (32KB/s real-time, send at 64KB/s)
-            chunk_size = 16384  # 16KB chunks
-            send_interval = chunk_size / (16000 * 2 * 2)  # ~0.256s per 16KB
+            # Stream audio chunks at ~1.2x real-time (close to real-time per AWS docs)
+            # Real-time rate: 16kHz * 2 bytes = 32KB/s
+            # At 1.2x: 38.4KB/s → ~0.213s per 8KB chunk
+            chunk_size = 8192
+            send_interval = chunk_size / (16000 * 2 * 1.2)
             for i in range(0, len(audio_data), chunk_size):
                 chunk = audio_data[i:i + chunk_size]
                 await stream.input_stream.send_audio_event(audio_chunk=chunk)
