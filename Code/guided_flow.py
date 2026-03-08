@@ -227,11 +227,28 @@ class GuidedFlow:
                 if self._confirm(f"I heard Aadhaar number {masked}. Is that correct?"):
                     self.aadhaar = aadhaar
                     self.enc.data["aadhaar_number"] = aadhaar
-                    # Ask for patient name along with Aadhaar on first visit
+
+                    # Check if patient already exists in database
+                    existing = self.sm.find_by_aadhaar(aadhaar)
+                    if existing and existing.get("patient_name"):
+                        name = existing["patient_name"]
+                        age = existing.get("age", "")
+                        gender = existing.get("gender", "")
+                        self.enc.set_demographics(name=name, age=age, gender=gender)
+                        self.enc.data["aadhaar_number"] = aadhaar
+                        details = f"Name: {name}"
+                        if age:
+                            details += f", Age: {age}"
+                        if gender:
+                            details += f", Gender: {'Male' if gender == 'M' else 'Female' if gender == 'F' else gender}"
+                        self._speak(f"Welcome back, {name}! I found your records. {details}.")
+                        _logger().info("[GF] Returning patient matched: %s", name)
+                        return
+
+                    # New patient — ask for name
                     self._speak("Aadhaar recorded. Please tell me the patient's name.")
                     name_resp = self._listen(duration=8)
                     if name_resp:
-                        # Clean up name — take words that look like a name
                         import re as _re
                         name_words = [w for w in name_resp.split()
                                       if _re.sub(r'[^a-zA-Z]', '', w)]
