@@ -271,7 +271,8 @@ class EncounterManager:
         result = assess(spo2=spo2, heart_rate=hr, temperature=temp, symptoms=symptoms)
         self.data["triage_level"] = result.level.value
         self.data["triage_confidence"] = str(round(result.confidence, 2))
-        self._transition(EncounterState.TRIAGE)
+        if self.state != EncounterState.TRIAGE:
+            self._transition(EncounterState.TRIAGE)
         return result
 
     def advance_from_triage(self):

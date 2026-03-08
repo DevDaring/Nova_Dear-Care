@@ -40,6 +40,7 @@ class GuidedFlow:
         self.vitals = {}
         self.env_data = {}
         self._running = True
+        self._prescriptions_done = False
 
     # ------------------------------------------------------------------
     # I/O helpers
@@ -156,13 +157,13 @@ class GuidedFlow:
 
             self._health_inquiry()
 
-            self._prescription_loop()
+            if not self._prescriptions_done:
+                self._prescription_loop()
             self.enc.advance_from_photo()
 
             self._pulse_reading()
             self._environment_reading()
             self.enc.advance_from_vitals()
-            self.enc.advance_from_audio()
 
             self._final_analysis()
             self._save_and_wrap()
@@ -389,6 +390,7 @@ class GuidedFlow:
                 self._speak("It sounds like you want to capture a prescription. Let me do that.")
                 _logger().info("[GF] Health inquiry redirected to prescription capture")
                 self._prescription_loop_direct()
+                self._prescriptions_done = True
                 return
 
             self.symptoms = resp
@@ -529,11 +531,17 @@ class GuidedFlow:
         time.sleep(3)
 
         self._speak("Measuring now. Please hold still for 15 seconds.")
+        sh = None
         try:
             from sensor_handler import SensorHandler
             sh = SensorHandler()
             sh.max30102.connect()
             readings = sh.read_vitals(duration=15)
+
+            if not readings:
+                self._beep()
+                self._speak("Could not get a reading. Check sensor placement and try again.")
+                return
 
             spo2 = readings.get("spo2")
             hr = readings.get("heart_rate")
@@ -557,6 +565,12 @@ class GuidedFlow:
         except Exception as e:
             _logger().error("[GF] Pulse reading error: %s", e)
             self._speak("Error reading pulse sensor.")
+        finally:
+            if sh:
+                try:
+                    sh.close()
+                except Exception:
+                    pass
 
     # --- Stage 8: Environment Sensor (BMP280) ---
 
@@ -564,11 +578,17 @@ class GuidedFlow:
         self._speak("Reading environmental conditions.")
         self._beep()
         time.sleep(3)
+        sh = None
         try:
             from sensor_handler import SensorHandler
             sh = SensorHandler()
             sh.bme280.connect()
-            readings = sh.read_all(vitals_duration=0)
+            readings = sh.read_environment()
+
+            if not readings:
+                self._beep()
+                self._speak("No environmental readings available.")
+                return
 
             temp = readings.get("temperature")
             pressure = readings.get("pressure")
@@ -597,6 +617,12 @@ class GuidedFlow:
         except Exception as e:
             _logger().error("[GF] Environment reading error: %s", e)
             self._speak("Could not read environmental sensor.")
+        finally:
+            if sh:
+                try:
+                    sh.close()
+                except Exception:
+                    pass
 
     # --- Stage 9: Final AI Analysis ---
 

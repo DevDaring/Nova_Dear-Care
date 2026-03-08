@@ -328,7 +328,9 @@ class PocketAsha:
         try:
             from sensor_handler import SensorHandler
             sh = SensorHandler()
+            sh.detect_sensors()
             readings = sh.read_all()
+            sh.close()
 
             if not readings:
                 return "No sensors detected. Please connect the pulse oximeter or thermometer.", False
@@ -613,6 +615,27 @@ def main():
         from storage_manager import StorageManager
         from sync_manager import SyncManager
         from guided_flow import GuidedFlow
+
+        # Hardware diagnostics
+        try:
+            from voice_handler import check_audio_devices
+            devs = check_audio_devices()
+            print(f"  Mic: {'Ready' if devs.get('mic') else 'Not found'}")
+            print(f"  Speaker: {'Ready' if devs.get('speaker') else 'Not found'}")
+        except Exception:
+            pass
+        try:
+            from sensor_handler import SensorHandler
+            _sh = SensorHandler()
+            _avail = _sh.detect_sensors()
+            for _name, _ok in _avail.items():
+                print(f"  Sensor {_name}: {'connected' if _ok else 'not connected'}")
+            _sh.close()
+        except Exception:
+            pass
+        from utils import check_internet
+        print(f"  Network: {'Online' if check_internet() else 'Offline'}")
+        print("=" * 60)
 
         enc = EncounterManager()
         sm = StorageManager()
