@@ -120,31 +120,27 @@ def _classify_keywords(text: str) -> Tuple[Intent, float]:
 def classify(text: str) -> Tuple[Intent, float]:
     """
     Classify user intent from text.
-    Primary: Bedrock LLM. Fallback: keyword matching.
+    Primary: keyword matching (instant). Fallback: Bedrock LLM (for unknowns).
     Returns (Intent, confidence 0-1).
     """
     if not text:
         return Intent.UNKNOWN, 0.0
 
-    # Try Bedrock first
+    # Try keywords first (instant, no API call)
+    intent, confidence = _classify_keywords(text)
+    if intent != Intent.UNKNOWN and confidence >= 0.65:
+        _logger().info("[INTENT] METHOD: Keyword match")
+        return intent, confidence
+
+    # Fallback to Bedrock for ambiguous/unknown input
+    print("  [Understanding...]", flush=True)
     intent, confidence = _classify_bedrock(text)
     if intent != Intent.UNKNOWN and confidence >= 0.6:
         _logger().info("[INTENT] METHOD: Bedrock LLM")
         return intent, confidence
 
-    # Fallback to keywords
-    intent, confidence = _classify_keywords(text)
-    _logger().info("[INTENT] METHOD: Keyword fallback")
+    # Return keyword result even if low confidence, or UNKNOWN
+    if intent == Intent.UNKNOWN:
+        intent, confidence = _classify_keywords(text)
+    _logger().info("[INTENT] METHOD: Keyword fallback (low confidence)")
     return intent, confidence
-
-    # Check for camera-related words as extra signal
-    camera_words = ["picture", "photo", "image", "camera", "snap", "capture", "scan", "read"]
-    if any(w in text_l for w in camera_words):
-        return Intent.CAPTURE_IMAGE, 0.60
-
-    # Check for health question patterns
-    health_q = ["how", "what", "why", "should", "can i", "is it"]
-    if any(q in text_l for q in health_q) and any(h in text_l for h in ["health", "pain", "sick", "feel"]):
-        return Intent.HEALTH_QUESTION, 0.55
-
-    return Intent.UNKNOWN, 0.0

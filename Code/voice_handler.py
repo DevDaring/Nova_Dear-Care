@@ -8,10 +8,13 @@ Audio flow:
  OUTPUT: Bose Bluetooth Speaker via PulseAudio paplay
 """
 
+import math
 import os
 import re
+import struct
 import subprocess
 import time
+import wave
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -19,6 +22,35 @@ from utils import get_logger
 
 _log = None
 _pyttsx_engine = None
+_beep_path = None
+
+
+def _generate_beep(path: str, freq: int = 880, duration: float = 0.25) -> str:
+    """Generate a short beep WAV file. Returns path on success."""
+    sample_rate = 16000
+    n_samples = int(sample_rate * duration)
+    samples = [int(16000 * math.sin(2 * math.pi * freq * t / sample_rate))
+               for t in range(n_samples)]
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(path, "w") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(struct.pack(f"<{len(samples)}h", *samples))
+    return path
+
+
+def _play_beep():
+    """Play the cached beep sound to signal recording is about to start."""
+    global _beep_path
+    if _beep_path is None:
+        from config import TEMP_DIR
+        _beep_path = str(TEMP_DIR / "beep.wav")
+        _generate_beep(_beep_path)
+    try:
+        subprocess.run(["paplay", _beep_path], capture_output=True, timeout=3)
+    except Exception:
+        pass
 
 
 def _logger():
@@ -66,6 +98,7 @@ def record_audio(output_path: str, duration: int = 7, device: str = None) -> boo
     device = device or JABRA_CAPTURE_DEV
     if device.startswith("hw:"):
         device = "plug" + device
+    _play_beep()
     _release_audio_device()
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -226,68 +259,78 @@ def _try_pyttsx3(text: str, output_path: str) -> bool:
 # ============================================================
 
 def speech_to_text(audio_path: str) -> Tuple[str, float]:
-    """Transcribe audio. Returns (text, confidence). Tries Transcribe then free fallback."""
+    """Transcribe audio. Returns (text, confidence). Tries Transcribe Streaming then free fallback."""
+    print("  [Processing speech...]", flush=True)
+    t0 = time.time()
     text, conf = _try_transcribe_stt(audio_path)
     if text:
+        _logger().info("[STT] Completed in %.1fs", time.time() - t0)
         return text, conf
-    return _try_speech_recognition(audio_path)
+    text, conf = _try_speech_recognition(audio_path)
+    _logger().info("[STT] Completed in %.1fs", time.time() - t0)
+    return text, conf
 
 
 def _try_transcribe_stt(audio_path: str) -> Tuple[str, float]:
-    """Use AWS Transcribe streaming (or batch via S3) for STT."""
+    """Use AWS Transcribe Streaming SDK for real-time STT."""
     try:
-        import boto3, json, uuid
-        from config import AWS_REGION, S3_BUCKET_NAME
+        import asyncio
+        from amazon_transcribe.client import TranscribeStreamingClient
+        from amazon_transcribe.handlers import TranscriptResultStreamHandler
+        from amazon_transcribe.model import TranscriptEvent
+        from config import AWS_REGION
         from language_handler import get_transcribe_lang_code
 
         lang = get_transcribe_lang_code()
         if not lang:
             return "", 0.0
 
-        s3 = boto3.client("s3", region_name=AWS_REGION)
-        tc = boto3.client("transcribe", region_name=AWS_REGION)
+        # Read the WAV file (skip 44-byte header)
+        with open(audio_path, "rb") as f:
+            f.read(44)  # skip WAV header
+            audio_data = f.read()
 
-        key = f"temp/audio_{uuid.uuid4().hex[:8]}.wav"
-        s3.upload_file(audio_path, S3_BUCKET_NAME, key)
+        if not audio_data:
+            return "", 0.0
 
-        job_name = f"asha_{uuid.uuid4().hex[:8]}"
-        tc.start_transcription_job(
-            TranscriptionJobName=job_name,
-            Media={"MediaFileUri": f"s3://{S3_BUCKET_NAME}/{key}"},
-            MediaFormat="wav", LanguageCode=lang,
-        )
-        # Poll for completion (max 30s)
-        for _ in range(30):
-            status = tc.get_transcription_job(TranscriptionJobName=job_name)
-            st = status["TranscriptionJob"]["TranscriptionJobStatus"]
-            if st == "COMPLETED":
-                uri = status["TranscriptionJob"]["Transcript"]["TranscriptFileUri"]
-                import urllib.request
-                with urllib.request.urlopen(uri) as resp:
-                    data = json.loads(resp.read())
-                items = data.get("results", {}).get("transcripts", [])
-                text = items[0]["transcript"] if items else ""
-                # cleanup
-                try:
-                    tc.delete_transcription_job(TranscriptionJobName=job_name)
-                    s3.delete_object(Bucket=S3_BUCKET_NAME, Key=key)
-                except Exception:
-                    pass
-                _logger().info("[STT] Transcribe: '%s'", text[:80])
-                return text, 0.92
-            if st == "FAILED":
-                break
-            time.sleep(1)
+        final_transcript = []
 
-        # cleanup on failure
-        try:
-            tc.delete_transcription_job(TranscriptionJobName=job_name)
-            s3.delete_object(Bucket=S3_BUCKET_NAME, Key=key)
-        except Exception:
-            pass
+        class Handler(TranscriptResultStreamHandler):
+            async def handle_transcript_event(self, transcript_event: TranscriptEvent):
+                results = transcript_event.transcript.results
+                for result in results:
+                    if not result.is_partial:
+                        for alt in result.alternatives:
+                            final_transcript.append(alt.transcript)
+
+        async def _stream():
+            client = TranscribeStreamingClient(region=AWS_REGION)
+            stream = await client.start_stream_transcription(
+                language_code=lang,
+                media_sample_rate_hz=16000,
+                media_encoding="pcm",
+            )
+            handler = Handler(stream.output_stream)
+
+            # Stream audio chunks (8KB each)
+            chunk_size = 8192
+            for i in range(0, len(audio_data), chunk_size):
+                chunk = audio_data[i:i + chunk_size]
+                await stream.input_stream.send_audio_event(audio_chunk=chunk)
+            await stream.input_stream.end_stream()
+
+            await handler.handle_events()
+
+        asyncio.run(_stream())
+
+        text = " ".join(final_transcript).strip()
+        if text:
+            _logger().info("[STT] Transcribe Streaming: '%s'", text[:80])
+            return text, 0.92
         return "", 0.0
+
     except Exception as e:
-        _logger().warning("[STT] Transcribe error: %s", e)
+        _logger().warning("[STT] Transcribe Streaming error: %s", e)
         return "", 0.0
 
 

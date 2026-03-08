@@ -79,6 +79,8 @@ class PocketAsha:
         self.sync.start()
 
         free_memory()
+        from utils import cleanup_temp
+        cleanup_temp()
         print("[INIT] Pocket ASHA ready")
         print("-" * 60)
 

@@ -12,7 +12,7 @@ import re
 import time
 from typing import Optional, Tuple
 
-from utils import get_logger, check_internet, free_memory
+from utils import get_logger, check_internet, free_memory, cleanup_temp
 
 _log = None
 
@@ -101,6 +101,7 @@ class GuidedFlow:
     def run(self) -> bool:
         """Execute the full guided flow. Returns True if completed."""
         _logger().info("[GF] Starting guided flow")
+        cleanup_temp()
         try:
             self._select_language()
             if not self._running:

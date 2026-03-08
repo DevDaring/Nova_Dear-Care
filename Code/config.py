@@ -137,6 +137,7 @@ MAX_OFFLINE_ENCOUNTERS = 100
 CAPTURE_KEYWORDS = [
     "take picture", "take image", "take photo", "capture",
     "take a picture", "take an image", "take a photo",
+    "take snap", "take a snap", "prescription snap", "snap prescription",
     "click photo", "click picture", "snap", "photograph",
     "look at the prescription", "look at prescription",
     "look at the report", "look at report",

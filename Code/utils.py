@@ -141,3 +141,15 @@ def generate_patient_id():
     """Generate a unique patient ID."""
     ts = datetime.now().strftime("%Y%m%d%H%M%S")
     return f"PAT_{ts}"
+
+
+def cleanup_temp():
+    """Remove stale files from temp directory on startup."""
+    from config import TEMP_DIR
+    try:
+        for f in Path(TEMP_DIR).glob("*"):
+            if f.is_file() and f.name != ".gitkeep":
+                f.unlink()
+        get_logger().info("[INIT] Temp directory cleaned")
+    except Exception:
+        pass
