@@ -82,7 +82,7 @@ SNAPSHOT_PREFIX = "patient_"
 # ============================================================
 MAX30102_I2C_BUS = 5
 MAX30102_I2C_ADDR = 0x57
-BME280_I2C_BUS = 1
+BME280_I2C_BUS = 5
 BME280_I2C_ADDR = 0x76
 
 # Vital sign thresholds

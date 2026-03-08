@@ -180,37 +180,42 @@ This runs 4 tests:
 
 Measures ambient temperature (°C), relative humidity (%), and barometric pressure (hPa). Used for environmental context in patient encounters.
 
-### Connection (I2C)
+### Connection (I2C via J24 40-Pin Header)
 
-| BME280 Pin | RDK S100 40-Pin Header | Purpose |
+| BME280 Pin | RDK S100 J24 Header | Purpose |
 |---|---|---|
 | VIN | Pin 1 | 3.3V Power |
 | GND | Pin 6 (or 9, 14, 20, 25) | Ground |
-| SDA | Pin 3 | I2C Data (I2C1 SDA) |
-| SCL | Pin 5 | I2C Clock (I2C1 SCL) |
+| SDA | Pin 3 | I2C Data (**I2C5_SDA_3V3**) |
+| SCL | Pin 5 | I2C Clock (**I2C5_SCL_3V3**) |
 | CSB/CS | Leave unconnected or tie HIGH | Chip select (optional) |
 | SDO | Leave unconnected or tie LOW | Address select — LOW for 0x76, HIGH for 0x77 |
 
-- **I2C Bus:** 1 (`/dev/i2c-1`)
+- **I2C Bus:** 5 (`/dev/i2c-5`) — shared with MAX30102 on the same SDA/SCL lines
 - **I2C Address:** `0x76` (default, SDO low) or `0x77` (SDO high)
+
+> **Note:** The 40-pin header (J24) on the RDK S100 maps pins 3/5 to **I2C bus 5**, not bus 1. Bus 1 is used by the left MIPI camera. Both BME280 and MAX30102 share bus 5.
 
 ### Packages Installed
 
 ```bash
-pip3 install smbus2==0.6.0 bme280
+sudo pip3 install RPi.bme280 smbus2
 sudo apt install -y i2c-tools
 ```
 
 ### How to Verify Connection
 
 ```bash
-# Scan I2C bus 1 — should show "76" (or "77")
-i2cdetect -y 1
+# Scan I2C bus 5 — should show "76" (or "77") alongside "57" (MAX30102)
+sudo i2cdetect -y -r 5
+
+# Read chip ID register (0x58 = BMP280, 0x60 = BME280)
+i2cget -y 5 0x76 0xD0
 
 # Python quick test
 python3 -c "
 import smbus2, bme280
-bus = smbus2.SMBus(1)
+bus = smbus2.SMBus(5)
 calib = bme280.load_calibration_params(bus, 0x76)
 data = bme280.sample(bus, 0x76, calib)
 print(f'Temp: {data.temperature:.1f}°C  Humidity: {data.humidity:.1f}%  Pressure: {data.pressure:.1f} hPa')
@@ -218,24 +223,39 @@ bus.close()
 "
 ```
 
+> **Tip:** The BME280 may not appear with a standard `i2cdetect -y 5` (Quick Write mode). Use `i2cdetect -y -r 5` (read mode) to force-detect it.
+
 ### How It Works in Code
 
 - File: `sensor_handler.py` → class `BME280`
-- Primary method: Uses `bme280` Python library for calibrated readings
+- Primary method: Uses `bme280` Python library (`RPi.bme280`) for calibrated readings
 - Fallback: Raw register reads (0xFA–0xFC for temp) if library unavailable
 - Chip ID register: `0xD0` → expects `0x60` (BME280) or `0x58` (BMP280)
+- Configuration: `config.py` → `BME280_I2C_BUS = 5`, `BME280_I2C_ADDR = 0x76`
+
+### Actual Sensor Identification
+
+The GY-BME280 module on this board reports Chip ID **0x58**, which identifies it as a **BMP280** (not BME280). The BMP280 lacks a humidity sensor, so humidity reads 0.0%. Temperature and pressure work correctly.
+
+| Feature | BME280 (0x60) | BMP280 (0x58) ← **Ours** |
+|---|---|---|
+| Temperature | ✓ | ✓ |
+| Pressure | ✓ | ✓ |
+| Humidity | ✓ | ✗ (reads 0%) |
 
 ### Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| `0x76` not in i2cdetect | Check wiring; try 0x77 (SDO tied high) |
-| Chip ID = 0x58 (BMP280) | BMP280 has no humidity — only temp+pressure |
+| `0x76` not in `i2cdetect -y -r 5` | Check wiring; try 0x77 (SDO tied high) |
+| Not visible with `i2cdetect -y 5` | Use `-r` flag for read-mode detection |
+| Chip ID = 0x58 (BMP280) | Normal — BMP280 has no humidity, only temp+pressure |
 | All readings = 0 | Sensor in sleep mode — code sends forced-mode command |
+| Permission denied | Run with `sudo` or add user to i2c group |
 
 ### Current Status
 
-**NOT CONNECTED** — Sensor not wired to the board yet. When connected to the 40-pin header (J24), it will share I2C bus 5 with the MAX30102 (Pin 3 SDA, Pin 5 SCL).
+**CONNECTED AND WORKING** — Sensor verified on I2C bus 5 (detected with `i2cdetect -y -r 5`), address 0x76. Chip ID 0x58 (BMP280). Temperature: 31.4°C, Pressure: 1010.5 hPa. Stable readings with 0.02°C drift over 5 seconds.
 
 ---
 

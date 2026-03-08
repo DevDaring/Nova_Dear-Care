@@ -202,7 +202,7 @@ class MAX30102:
 class BME280:
     """BME280 environmental sensor via I2C."""
 
-    def __init__(self, bus: int = 1, addr: int = 0x76):
+    def __init__(self, bus: int = 5, addr: int = 0x76):
         self.bus_num = bus
         self.addr = addr
         self.available = False
