@@ -94,7 +94,7 @@ def test_max30102():
     if not connected:
         _record("MAX30102", False, False,
                 f"Not found on I2C bus {bus}, addr 0x{addr:02X}. "
-                "Check wiring: VIN→3.3V, GND→GND, SDA→I2C1_SDA, SCL→I2C1_SCL")
+                "Check wiring: VIN→3.3V(Pin1), GND→Pin6, SDA→Pin3(I2C5_SDA), SCL→Pin5(I2C5_SCL)")
         return
 
     # Check if working — read part ID register

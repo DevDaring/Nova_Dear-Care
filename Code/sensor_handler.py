@@ -58,7 +58,7 @@ _MAX_PART_ID      = 0xFF
 class MAX30102:
     """MAX30102 pulse oximeter / heart-rate sensor via I2C."""
 
-    def __init__(self, bus: int = 1, addr: int = 0x57):
+    def __init__(self, bus: int = 5, addr: int = 0x57):
         self.bus_num = bus
         self.addr = addr
         self._bus = None

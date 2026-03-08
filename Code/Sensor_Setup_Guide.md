@@ -68,18 +68,20 @@ If I2C is not enabled, run `sudo srpi-config` → 3 (Interface Options) → I3 �
 
 Measures blood oxygen saturation (SpO2) and heart rate using infrared/red LED light through the finger.
 
-### Connection (I2C)
+### Connection (I2C via J24 40-Pin Header)
 
-| MAX30102 Pin | RDK S100 40-Pin Header | Purpose |
+| MAX30102 Pin | RDK S100 J24 Header | Purpose |
 |---|---|---|
 | VIN (Red) | Pin 1 | 3.3V Power |
 | GND (Black) | Pin 6 (or 9, 14, 20, 25) | Ground |
-| SDA (Green) | Pin 3 | I2C Data (I2C1 SDA) |
-| SCL (Blue) | Pin 5 | I2C Clock (I2C1 SCL) |
+| SDA (Green) | Pin 3 | I2C Data (**I2C5_SDA_3V3**) |
+| SCL (Blue) | Pin 5 | I2C Clock (**I2C5_SCL_3V3**) |
 | INT | Leave unconnected | Interrupt (optional) |
 
-- **I2C Bus:** 1 (`/dev/i2c-1`)
+- **I2C Bus:** 5 (`/dev/i2c-5`)
 - **I2C Address:** `0x57`
+
+> **Important:** The RDK S100's 40-pin header (J24) uses **I2C bus 5**, not bus 1. Bus 1 is used by the left MIPI camera (SC230AI at 0x30). This was confirmed via `i2cdetect -y 5`.
 
 ### Packages Installed
 
@@ -91,39 +93,84 @@ sudo apt install -y i2c-tools
 ### How to Verify Connection
 
 ```bash
-# Scan I2C bus 1 — should show "57" in the grid
-i2cdetect -y 1
+# Scan I2C bus 5 — should show "57" in the grid
+i2cdetect -y 5
+
+# Verify Part ID (should return 0x15 for MAX30102)
+i2cget -y 5 0x57 0xFF
 
 # Python quick test
 python3 -c "
 import smbus2
-bus = smbus2.SMBus(1)
+bus = smbus2.SMBus(5)
 part_id = bus.read_byte_data(0x57, 0xFF)
-print(f'MAX30102 Part ID: 0x{part_id:02X} (expected: 0x15)')
+rev_id = bus.read_byte_data(0x57, 0xFE)
+print(f'MAX30102 Part ID: 0x{part_id:02X} (expected: 0x15), Rev: 0x{rev_id:02X}')
 bus.close()
 "
 ```
 
+### Dedicated Test Script
+
+A comprehensive test script is available at `Sensors_Test/test_pulse_sensor.py`:
+
+```bash
+cd ~/Documents/AI_4_Bharat/Code
+sudo python3 Sensors_Test/test_pulse_sensor.py
+```
+
+This runs 4 tests:
+1. **I2C connection** — verifies device responds on bus 5, addr 0x57
+2. **Part ID** — reads register 0xFF, expects 0x15 (MAX30102, revision 0x03)
+3. **Temperature** — reads on-die temperature to verify register read/write
+4. **Live FIFO data** — configures SpO2 mode, reads RED+IR samples for 10 seconds, estimates heart rate if finger is placed on sensor
+
 ### How It Works in Code
 
-- File: `sensor_handler.py` → class `MAX30102Reader`
-- Reads raw RED and IR LED values from FIFO registers
-- Calculates SpO2 using R-ratio formula: `SpO2 = 110 - 25 × (RED_AC/RED_DC) / (IR_AC/IR_DC)`
-- Heart rate estimated via IR signal peak detection
+- File: `sensor_handler.py` → class `MAX30102`
+- Reads raw RED and IR LED values from FIFO registers (6 bytes per sample, 18-bit resolution)
+- Calculates SpO2 using R-ratio formula: `SpO2 = 110 - 25 × (RED_avg / IR_avg)`
+- Heart rate estimated via IR signal peak detection (~50 Hz effective sample rate)
 - Registers used: MODE_CONFIG (0x09), SPO2_CONFIG (0x0A), LED1_PA (0x0C), LED2_PA (0x0D), FIFO_DATA (0x07)
+- Configuration: `config.py` → `MAX30102_I2C_BUS = 5`, `MAX30102_I2C_ADDR = 0x57`
+
+### Register Configuration
+
+| Register | Address | Value | Description |
+|---|---|---|---|
+| MODE_CONFIG | 0x09 | 0x03 | SpO2 mode (RED + IR LEDs) |
+| SPO2_CONFIG | 0x0A | 0x27 | ADC range 4096nA, 100 sps, 18-bit pulse width |
+| FIFO_CONFIG | 0x08 | 0x4F | Sample avg=4, FIFO rollover enabled |
+| LED1_PA (RED) | 0x0C | 0x24 | 6.4 mA LED current |
+| LED2_PA (IR) | 0x0D | 0x24 | 6.4 mA LED current |
+| PART_ID | 0xFF | 0x15 | MAX30102 identifier (read-only) |
+| REVISION_ID | 0xFE | 0x03 | Silicon revision (read-only) |
+
+### I2C Bus Map (RDK S100)
+
+| Bus | Devices | Notes |
+|---|---|---|
+| 0 | (empty) | — |
+| 1 | 0x30, 0x50, 0x58 | Left camera (SC230AI) + EEPROM |
+| 2 | 0x32, 0x50, 0x58 | Right camera (SC230AI) + EEPROM |
+| 3 | (empty) | — |
+| 4 | 0x32 | Internal |
+| 5 | **0x57** | **MAX30102 (40-pin header J24)** |
 
 ### Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| `0x57` not in i2cdetect | Check wiring — VIN→3.3V, GND→GND, SDA→Pin3, SCL→Pin5 |
+| `0x57` not in `i2cdetect -y 5` | Check wiring — VIN→Pin1(3.3V), GND→Pin6, SDA→Pin3, SCL→Pin5 |
+| `/dev/i2c-5` not found | Enable I2C5: `sudo srpi-config` → Interface Options → I2C5 → Enable → Reboot |
 | Part ID ≠ 0x15 | You may have a MAX30100 (0x11) — different register map |
-| SpO2 reads 0 | Place finger firmly on sensor; wait 10–15s for warmup |
-| "Bus error" | I2C not enabled — run `sudo srpi-config` |
+| SpO2 reads 0 / no pulse detected | Place finger firmly on sensor; wait 10–15s for warmup |
+| RED/IR values near zero | Check VIN is connected to 3.3V (Pin 1), not 5V |
+| Permission denied | Run with `sudo` or add user to i2c group: `sudo usermod -aG i2c $USER` |
 
 ### Current Status
 
-**NOT CONNECTED** — Sensor not wired to the board yet. Wire to I2C bus 1, address 0x57.
+**CONNECTED AND WORKING** — Sensor verified on I2C bus 5, address 0x57. Part ID 0x15 (MAX30102), revision 0x03. Die temperature reads 31.4°C. RED and IR LEDs firing correctly (RED avg=950, IR avg=598). All 4 diagnostic tests pass.
 
 ---
 
@@ -173,7 +220,7 @@ bus.close()
 
 ### How It Works in Code
 
-- File: `sensor_handler.py` → class `BME280Reader`
+- File: `sensor_handler.py` → class `BME280`
 - Primary method: Uses `bme280` Python library for calibrated readings
 - Fallback: Raw register reads (0xFA–0xFC for temp) if library unavailable
 - Chip ID register: `0xD0` → expects `0x60` (BME280) or `0x58` (BMP280)
@@ -188,7 +235,7 @@ bus.close()
 
 ### Current Status
 
-**NOT CONNECTED** — Sensor not wired to the board yet. Both MAX30102 and BME280 share the same I2C bus 1 (Pin 3 SDA, Pin 5 SCL).
+**NOT CONNECTED** — Sensor not wired to the board yet. When connected to the 40-pin header (J24), it will share I2C bus 5 with the MAX30102 (Pin 3 SDA, Pin 5 SCL).
 
 ---
 
