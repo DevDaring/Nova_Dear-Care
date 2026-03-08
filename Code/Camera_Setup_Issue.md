@@ -5,7 +5,8 @@
 **Camera:** RDK Stereo Camera Module (SC230AI dual)
 **Project:** Pocket ASHA — AI for Bharat Hackathon
 **Status:** ❌ BLOCKED — MIPI HS reception fails; sensor initializes but no video data received
-**Next Action:** 🔧 Flip DIP switch SW2200 from LPWM → MCLK (hardware fix — see Section 11)
+**Next Action:** 🔧 **PENDING** — Physically flip DIP switch SW2200 from LPWM → MCLK on Camera Expansion Board (hardware fix — see Section 11)
+**Debugging Attempts:** 25 (all documented below — software solutions exhausted, hardware fix is the only remaining option)
 
 ---
 
@@ -662,38 +663,89 @@ When SW2200 is set to MCLK (DOWN position), the expansion board's crystal oscill
 
 ---
 
-## 11. Next Steps — DIP Switch SW2200 Fix
+## 11. Recommended Fix — DIP Switch SW2200 Toggle (PENDING)
+
+> **STATUS: PENDING USER ACTION** — This is a hardware-only fix that must be done physically on the Camera Expansion Board. All software approaches have been exhausted (25 attempts documented in Section 7).
+
+### Why This Is the Only Remaining Option
+
+After exhaustive debugging, we have proven that:
+- The SoC's MIPI host driver (`hobot_mipicsi.ko`) has **no MCLK output capability** — it doesn't use the Linux clock framework
+- The VIO camera clock subsystem callbacks are **empty stubs** that do nothing
+- The only `cam_clkout` pin (`cam_lpwm1_dout3`) has no clock generator behind it and conflicts with Ethernet
+- `cam0_dummy_clk` is a virtual placeholder — NOT a real hardware clock
+- The SCMI clock controller has **no clock ID** for sensor MCLK output
+- Two separate DTB modifications both failed (pin conflict, then virtual clock)
+- **Software cannot provide MCLK on the RDK S100. The clock must come from external hardware.**
+
+The Camera Expansion Board has a **24 MHz active crystal oscillator** onboard that can feed MCLK directly to the camera sensors through MIPI connector Pin 5. This oscillator output is controlled by DIP switch **SW2200**.
 
 ### Instructions (HARDWARE FIX — Must be done physically)
 
 ```
-1. Power OFF the RDK S100 completely (SW1 to OFF, unplug DC power)
-2. Locate DIP switch SW2200 on the Camera Expansion Board
-   - Small 2-position DIP switch near the MIPI camera connectors
-   - Currently set to LPWM (both switches in UP position)
-3. Flip BOTH switches on SW2200 to the MCLK position (DOWN)
-   - Switch 1 = MCLK for MIPI Cam 1 (J2200, left sensor)
-   - Switch 2 = MCLK for MIPI Cam 2 (J2201, right sensor)
-4. Confirm SW2201 is still at 3.3V (both UP) — do NOT change this
-5. Power ON the board and wait for boot
-6. Test:
-   cd /app/multimedia_samples/sample_vin/get_vin_data
-   sudo ./get_vin_data -s 6
-7. Check kernel log:
-   dmesg | grep -E "mclk|hs reception|sc230"
+STEP 1: Power OFF the RDK S100 completely
+        - Flip power switch SW1 to OFF position
+        - Unplug the DC power cable
+        - Wait 5 seconds for capacitors to discharge
+
+STEP 2: Locate DIP switch SW2200 on the Camera Expansion Board
+        - It is a small 2-position DIP switch
+        - Located near the MIPI camera connectors (J2200 / J2201)
+        - Currently both switches are in the UP position (= LPWM mode)
+
+STEP 3: Flip BOTH switches on SW2200 to DOWN position (= MCLK mode)
+        - Switch 1 DOWN = MCLK for left camera  (MIPI Cam 1, connector J2200)
+        - Switch 2 DOWN = MCLK for right camera (MIPI Cam 2, connector J2201)
+        ┌─────────────┐
+        │   SW2200     │
+        │  ┌───┬───┐   │
+        │  │ 1 │ 2 │   │
+        │  ├───┼───┤   │
+        │  │ ↓ │ ↓ │   │  ← Move BOTH switches DOWN (MCLK)
+        │  └───┴───┘   │
+        │  ON  = MCLK  │
+        │  OFF = LPWM  │
+        └─────────────┘
+
+STEP 4: Verify SW2201 is UNCHANGED
+        - SW2201 must remain at 3.3V (both switches UP)
+        - Do NOT touch SW2201
+
+STEP 5: Power ON the board
+        - Plug in DC power cable
+        - Flip power switch SW1 to ON
+        - Wait for full boot (~60 seconds)
+
+STEP 6: Test the camera
+        cd /app/multimedia_samples/sample_vin/get_vin_data
+        sudo ./get_vin_data -s 6
+
+STEP 7: Check kernel log for success/failure
+        dmesg | grep -E "mclk|hs reception|sc230"
 ```
 
 ### Expected Outcome If SW2200=MCLK Works
 
-- `[RX0]: mclk 24 ignore` — still appears (SoC side) but harmless
+- `[RX0]: mclk 24 ignore` — **still appears** (SoC side can't control it — this is expected and harmless)
 - `[RX0]: check hs reception` → **succeeds** (no error 0x10000)
-- `get_vin_data` captures frames and writes raw image files
-- Camera pipeline starts successfully (no ret -36)
+- `get_vin_data` captures frames and writes raw image files to disk
+- Camera pipeline starts successfully (no `ret -36` error)
+- The sensor receives 24MHz from the expansion board's crystal oscillator via connector Pin 5
 
 ### Expected Outcome If SW2200=MCLK Does NOT Work
 
-- Same `hs reception check error 0x10000` — means MCLK from SW2200 either doesn't reach the sensor via Pin 5, or the sensor requires a different MCLK routing
-- In this case, contact D-Robotics support with this full issue document
+- Same `hs reception check error 0x10000` — means either:
+  - The oscillator output doesn't reach the sensor via Pin 5 on this specific expansion board revision
+  - The sensor requires MCLK through a different pin/mechanism
+  - The SW2200 switch labels are different from what the documentation states
+- **In this case:** Contact D-Robotics support at [developer.d-robotics.cc](https://developer.d-robotics.cc) with this full issue document attached
+
+### If SW2200 Cannot Be Located or Board Has No DIP Switch
+
+- Some expansion board revisions may not have SW2200
+- Check for a jumper or solder bridge instead of a DIP switch
+- The oscillator component should be visible near the MIPI connectors — a small rectangular metal can marked "24.000" or similar
+- Contact D-Robotics support with the board revision number (printed on the PCB silkscreen)
 
 ---
 
@@ -833,4 +885,4 @@ The RDK Stereo Camera Module contains **SC230AI** sensors (chip ID `0xCB34`), no
 
 4. **The MCLK must come from the Camera Expansion Board's 24 MHz crystal oscillator**, controlled by DIP switch SW2200. Flipping SW2200 from LPWM (UP) to MCLK (DOWN) should provide 24 MHz directly to the camera sensors through the MIPI connector Pin 5, bypassing the SoC entirely.
 
-**Next action: Physically flip DIP switch SW2200 to MCLK position and retest.**
+**Next action: Physically flip DIP switch SW2200 to MCLK (DOWN) position and retest with `sudo ./get_vin_data -s 6`. This is a hardware-only change — no further software modifications needed. The DTB is at stock/clean state. See Section 11 for detailed step-by-step instructions.**
