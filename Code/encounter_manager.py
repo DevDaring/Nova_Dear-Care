@@ -338,6 +338,7 @@ class EncounterManager:
         return {
             "encounter_id": self.encounter_id,
             "patient_name": self.data.get("patient_name", ""),
+            "aadhaar_number": self.data.get("aadhaar_number", ""),
             "age": self.data.get("age", ""),
             "gender": self.data.get("gender", ""),
             "spo2": self.data.get("spo2", ""),

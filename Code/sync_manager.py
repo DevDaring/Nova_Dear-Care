@@ -88,6 +88,13 @@ class SyncManager:
                 if success:
                     sm.update_encounter(eid, sync_status="synced")
                     _logger().info("[SYNC] Synced encounter %s", eid)
+                    # Trigger Lambda for clinical notes
+                    try:
+                        from aws_handler import invoke_lambda
+                        invoke_lambda({"encounter_id": eid, "action": "generate_notes"})
+                        _logger().info("[SYNC] Lambda triggered for %s", eid)
+                    except Exception as le:
+                        _logger().warning("[SYNC] Lambda trigger failed for %s: %s", eid, le)
                 else:
                     _logger().warning("[SYNC] Partial sync for %s", eid)
             except Exception as e:

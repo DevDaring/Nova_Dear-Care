@@ -456,6 +456,18 @@ class GuidedFlow:
             result = self.sync.sync_now()
             if result.get("synced", 0) > 0:
                 self._speak("Data synced to the cloud successfully.")
+                # Trigger Lambda for clinical notes + health summary
+                try:
+                    from aws_handler import invoke_lambda
+                    eid = summary.get("encounter_id", "")
+                    for action in ["generate_notes", "health_summary"]:
+                        resp = invoke_lambda({"encounter_id": eid, "action": action})
+                        if resp and resp.get("statusCode") == 200:
+                            _logger().info("[GF] Lambda %s completed for %s", action, eid)
+                        else:
+                            _logger().warning("[GF] Lambda %s failed for %s", action, eid)
+                except Exception as e:
+                    _logger().warning("[GF] Lambda invocation error: %s", e)
             else:
                 self._speak("Sync pending. Data saved locally and will sync later.")
         else:
