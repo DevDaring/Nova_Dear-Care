@@ -329,7 +329,7 @@ def listen(duration: int = 7) -> str:
     return ""
 
 
-def listen_for_wake_word(duration: int = 5) -> Tuple[bool, str]:
+def listen_for_wake_word(duration: int = 7) -> Tuple[bool, str]:
     """Record, transcribe, check for wake word. Returns (detected, command)."""
     from config import TEMP_AUDIO_INPUT, WAKE_WORDS, WAKE_WORD_VARIATIONS, WAKE_PHRASES
     inp = str(TEMP_AUDIO_INPUT)

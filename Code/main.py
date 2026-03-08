@@ -202,7 +202,13 @@ class PocketAsha:
                     return cmd
                 elif detected:
                     self.speak("Yes, I'm listening.")
-                    resp = self.listen_response()
+                    resp = self.listen_response(duration=10)
+                    if resp:
+                        print(f"  You: {resp}")
+                        return resp
+                    # If still nothing, try once more
+                    self.speak("I didn't catch that. Please say your command.")
+                    resp = self.listen_response(duration=10)
                     if resp:
                         print(f"  You: {resp}")
                         return resp
@@ -237,10 +243,7 @@ class PocketAsha:
 
         # CAPTURE IMAGE
         if intent == Intent.CAPTURE_IMAGE:
-            self.state = "awaiting_confirmation"
-            self.pending_action = "capture"
-            from config import CONFIRM_CAPTURE
-            return CONFIRM_CAPTURE, True
+            return self._capture_and_analyze()
 
         # MEASURE VITALS
         if intent == Intent.MEASURE_VITALS:
@@ -473,6 +476,9 @@ class PocketAsha:
         from config import GREETING_MESSAGE, WAKE_WORD_HINT
         from utils import free_memory
 
+        # Language selection at startup
+        self._ask_language()
+
         self.speak(GREETING_MESSAGE)
 
         needs_followup = False
@@ -533,6 +539,50 @@ class PocketAsha:
         from aws_handler import clear_chat
         clear_chat()
         print("[ASHA] Goodbye!")
+
+    def _ask_language(self):
+        """Ask user to select language at startup."""
+        from language_handler import LANGUAGES, set_language
+        # Show top languages with numbers
+        top_langs = [("en", "English"), ("hi", "Hindi"), ("bn", "Bengali"),
+                     ("ta", "Tamil"), ("te", "Telugu"), ("mr", "Marathi")]
+        print("\n  Please choose your language:")
+        for i, (code, name) in enumerate(top_langs, 1):
+            print(f"    {i}. {name}")
+        print(f"    0. More languages")
+
+        self.speak("Please choose your language. Say English, Hindi, Bengali, Tamil, Telugu, or Marathi.")
+        resp = ""
+        if self.use_voice:
+            resp = self.listen_response(duration=7)
+        if not resp:
+            # Text fallback
+            try:
+                import select
+                print("\n  > Enter language (or press Enter for English): ", end="", flush=True)
+                if select.select([sys.stdin], [], [], 10)[0]:
+                    resp = sys.stdin.readline().strip()
+            except Exception:
+                pass
+
+        if resp:
+            resp_l = resp.lower().strip()
+            # Check for number input
+            if resp_l in ("1", "2", "3", "4", "5", "6") and int(resp_l) <= len(top_langs):
+                code, name = top_langs[int(resp_l) - 1]
+                set_language(code)
+                self.speak(f"Language set to {name}.")
+                return
+            # Check by name
+            for code, info in LANGUAGES.items():
+                if info["name"].lower() in resp_l or info.get("name_local", "") in resp:
+                    set_language(code)
+                    self.speak(f"Language set to {info['name']}.")
+                    return
+
+        # Default to English
+        set_language("en")
+        print("  [Using English]")
 
 
 # ============================================================
