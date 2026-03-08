@@ -90,6 +90,7 @@ class EncounterManager:
             "encounter_id": self.encounter_id,
             "patient_id": self.patient_id,
             "timestamp": get_timestamp(),
+            "aadhaar_number": "",
             "patient_name": "",
             "age": "",
             "gender": "",

@@ -260,12 +260,44 @@ TRIAGE_PROMPT = """Given these patient vitals and symptoms, provide a brief tria
 
 Classify as URGENT or ROUTINE. Give 1-2 sentence recommendation."""
 
+INTENT_CLASSIFICATION_PROMPT = """Classify the following user utterance into exactly one intent.
+Return ONLY a JSON object: {{"intent": "<INTENT>", "confidence": <0.0-1.0>}}
+
+Valid intents: START_ENCOUNTER, CAPTURE_IMAGE, MEASURE_VITALS, RECORD_AUDIO,
+CONFIRM, DENY, HEALTH_QUESTION, SET_LANGUAGE, SYNC_DATA, HELP, EXIT,
+GREETING, THANKS, UNKNOWN
+
+Utterance: {text}"""
+
+AADHAAR_EXTRACTION_PROMPT = """Extract the 12-digit Aadhaar number from the following text.
+Return ONLY a JSON object: {{"aadhaar": "<12-digit number or null>"}}
+If no valid 12-digit Aadhaar number is found, return {{"aadhaar": null}}
+
+Text: {text}"""
+
+HEALTH_SUMMARY_PROMPT = """You are a healthcare assistant. Provide a brief, actionable health summary.
+
+Patient data:
+- Symptoms: {symptoms}
+- Prescriptions: {prescriptions}
+- SpO2: {spo2}%
+- Heart Rate: {heart_rate} bpm
+- Temperature: {temperature}°C
+- Ambient Pressure: {pressure} hPa
+
+Provide:
+1. Overall assessment (1 sentence)
+2. Key concerns (bullet points)
+3. Recommendation: URGENT referral or ROUTINE follow-up
+
+Keep response under 5 sentences."""
+
 # ============================================================
 # CSV SCHEMA
 # ============================================================
 CSV_HEADERS = [
     "encounter_id", "timestamp", "asha_worker_id", "patient_id",
-    "patient_name", "age", "gender", "spo2", "heart_rate",
+    "aadhaar_number", "patient_name", "age", "gender", "spo2", "heart_rate",
     "temperature", "triage_level", "triage_confidence",
     "sync_status", "photo_count", "audio_count", "notes",
 ]

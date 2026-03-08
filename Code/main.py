@@ -542,10 +542,55 @@ class PocketAsha:
 def main():
     parser = argparse.ArgumentParser(description="Pocket ASHA Healthcare Assistant")
     parser.add_argument("--text", action="store_true", help="Text-only mode (no microphone/speaker)")
+    parser.add_argument("--guided", action="store_true", help="Run guided encounter flow")
     args = parser.parse_args()
 
-    app = PocketAsha(use_voice=not args.text)
-    app.run()
+    if args.guided:
+        # Guided sequential flow
+        from utils import setup_logging, get_logger
+        setup_logging()
+        log = get_logger()
+        use_voice = not args.text
+
+        print("=" * 60)
+        print("  POCKET ASHA - Guided Encounter Flow")
+        print("=" * 60)
+
+        import voice_handler
+        from encounter_manager import EncounterManager
+        from storage_manager import StorageManager
+        from sync_manager import SyncManager
+        from guided_flow import GuidedFlow
+
+        enc = EncounterManager()
+        sm = StorageManager()
+        sync = SyncManager()
+        sync.start()
+
+        flow = GuidedFlow(voice_handler, enc, sm, sync, use_voice=use_voice)
+
+        try:
+            while _running:
+                flow.run()
+                # Ask if another encounter
+                print("\n  > Start another encounter? (yes/no): ", end="", flush=True)
+                import sys
+                try:
+                    ans = sys.stdin.readline().strip().lower()
+                except Exception:
+                    ans = ""
+                if ans not in ("yes", "y", "haan", "ha"):
+                    break
+                enc = EncounterManager()
+                flow = GuidedFlow(voice_handler, enc, sm, sync, use_voice=use_voice)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            sync.stop()
+            print("[ASHA] Goodbye!")
+    else:
+        app = PocketAsha(use_voice=not args.text)
+        app.run()
 
 
 if __name__ == "__main__":

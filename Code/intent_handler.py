@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-intent_handler.py - Wake word detection and intent classification for Pocket ASHA.
+intent_handler.py - Intent classification for Pocket ASHA.
+Primary: AWS Bedrock LLM classification. Fallback: keyword matching.
 """
 
 from enum import Enum, auto
@@ -11,6 +12,16 @@ from config import (
     CONFIRM_KEYWORDS, DENY_KEYWORDS, HEALTH_KEYWORDS, EXIT_KEYWORDS,
     ENCOUNTER_KEYWORDS, SYNC_KEYWORDS, LANGUAGE_KEYWORDS, HELP_KEYWORDS,
 )
+from utils import get_logger
+
+_log = None
+
+
+def _logger():
+    global _log
+    if _log is None:
+        _log = get_logger()
+    return _log
 
 
 class Intent(Enum):
@@ -45,22 +56,31 @@ _KEYWORD_MAP = [
     (EXIT_KEYWORDS, Intent.EXIT),
 ]
 
-_GREETING_WORDS = ["hello", "hi", "namaste", "good morning", "good afternoon", "good evening"]
-_THANKS_WORDS = ["thank", "thanks", "dhanyavaad", "shukriya"]
+_INTENT_NAME_MAP = {e.name: e for e in Intent}
 
 
-def classify(text: str) -> Tuple[Intent, float]:
-    """
-    Classify user intent from text.
-    Returns (Intent, confidence 0-1).
-    """
-    if not text:
+def _classify_bedrock(text: str) -> Tuple[Intent, float]:
+    """Try LLM-based classification via Bedrock."""
+    try:
+        from aws_handler import classify_intent_llm
+        result = classify_intent_llm(text)
+        if not result:
+            return Intent.UNKNOWN, 0.0
+        intent_name = result.get("intent", "UNKNOWN").upper()
+        confidence = min(max(float(result.get("confidence", 0.0)), 0.0), 1.0)
+        intent = _INTENT_NAME_MAP.get(intent_name, Intent.UNKNOWN)
+        _logger().info("[INTENT] Bedrock classified: %s (%.0f%%)", intent.value, confidence * 100)
+        return intent, confidence
+    except Exception as e:
+        _logger().warning("[INTENT] Bedrock classification failed: %s", e)
         return Intent.UNKNOWN, 0.0
 
+
+def _classify_keywords(text: str) -> Tuple[Intent, float]:
+    """Keyword-based fallback classification."""
     text_l = text.lower().strip()
     words = text_l.split()
 
-    # Keyword matching — score by number of matching keywords (run first)
     best_intent = Intent.UNKNOWN
     best_score = 0.0
 
@@ -68,7 +88,6 @@ def classify(text: str) -> Tuple[Intent, float]:
         matches = 0
         for kw in keywords:
             if len(kw) <= 3:
-                # Short keywords: match whole words only
                 if kw in words:
                     matches += 1
             else:
@@ -83,17 +102,40 @@ def classify(text: str) -> Tuple[Intent, float]:
     if best_score >= 0.65:
         return best_intent, best_score
 
-    # Thanks — word-level match, only if no strong keyword match
+    # Thanks
     if any(w in words for w in ["thanks", "thank", "dhanyavaad", "shukriya"]):
         return Intent.THANKS, 0.85
 
-    # Greeting — word-level match
+    # Greeting
     if any(w in words for w in ["hello", "hi", "namaste"]) or \
        any(g in text_l for g in ["good morning", "good afternoon", "good evening"]):
         return Intent.GREETING, 0.85
 
     if best_score > 0:
         return best_intent, best_score
+
+    return Intent.UNKNOWN, 0.0
+
+
+def classify(text: str) -> Tuple[Intent, float]:
+    """
+    Classify user intent from text.
+    Primary: Bedrock LLM. Fallback: keyword matching.
+    Returns (Intent, confidence 0-1).
+    """
+    if not text:
+        return Intent.UNKNOWN, 0.0
+
+    # Try Bedrock first
+    intent, confidence = _classify_bedrock(text)
+    if intent != Intent.UNKNOWN and confidence >= 0.6:
+        _logger().info("[INTENT] METHOD: Bedrock LLM")
+        return intent, confidence
+
+    # Fallback to keywords
+    intent, confidence = _classify_keywords(text)
+    _logger().info("[INTENT] METHOD: Keyword fallback")
+    return intent, confidence
 
     # Check for camera-related words as extra signal
     camera_words = ["picture", "photo", "image", "camera", "snap", "capture", "scan", "read"]

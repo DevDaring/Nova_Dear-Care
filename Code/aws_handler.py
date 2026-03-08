@@ -161,6 +161,58 @@ def clear_chat():
     _chat_history.clear()
 
 
+def classify_intent_llm(text: str) -> dict:
+    """Classify user intent via Bedrock. Returns {"intent": str, "confidence": float} or empty dict."""
+    from config import INTENT_CLASSIFICATION_PROMPT
+    prompt = INTENT_CLASSIFICATION_PROMPT.format(text=text)
+    resp = invoke_llm(prompt, system_prompt="You are an intent classifier. Return only valid JSON.", max_tokens=64)
+    if not resp:
+        return {}
+    try:
+        start = resp.find("{")
+        end = resp.rfind("}") + 1
+        if start >= 0 and end > start:
+            data = json.loads(resp[start:end])
+            return {"intent": data.get("intent", "UNKNOWN"), "confidence": float(data.get("confidence", 0.0))}
+    except (json.JSONDecodeError, ValueError, TypeError):
+        _logger().warning("[AWS] Failed to parse intent response: %s", resp[:100])
+    return {}
+
+
+def extract_aadhaar_llm(text: str) -> str:
+    """Extract 12-digit Aadhaar number from speech text via Bedrock. Returns number string or empty."""
+    from config import AADHAAR_EXTRACTION_PROMPT
+    prompt = AADHAAR_EXTRACTION_PROMPT.format(text=text)
+    resp = invoke_llm(prompt, system_prompt="You extract Aadhaar numbers. Return only valid JSON.", max_tokens=64)
+    if not resp:
+        return ""
+    try:
+        start = resp.find("{")
+        end = resp.rfind("}") + 1
+        if start >= 0 and end > start:
+            data = json.loads(resp[start:end])
+            aadhaar = data.get("aadhaar")
+            if aadhaar and len(str(aadhaar).replace(" ", "")) == 12:
+                return str(aadhaar).replace(" ", "")
+    except (json.JSONDecodeError, ValueError, TypeError):
+        _logger().warning("[AWS] Failed to parse Aadhaar response: %s", resp[:100])
+    return ""
+
+
+def analyze_health_summary(symptoms: str, prescriptions: str, vitals: dict, env_data: dict) -> str:
+    """Generate consolidated health summary via Bedrock."""
+    from config import HEALTH_SUMMARY_PROMPT
+    prompt = HEALTH_SUMMARY_PROMPT.format(
+        symptoms=symptoms or "None reported",
+        prescriptions=prescriptions or "None captured",
+        spo2=vitals.get("spo2", "N/A"),
+        heart_rate=vitals.get("heart_rate", "N/A"),
+        temperature=vitals.get("temperature", "N/A"),
+        pressure=env_data.get("pressure", "N/A"),
+    )
+    return invoke_llm(prompt)
+
+
 # ============================================================
 # S3
 # ============================================================

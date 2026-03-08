@@ -79,7 +79,7 @@ class SyncManager:
             eid = enc.get("encounter_id", "")
             if not eid:
                 continue
-            folder = sm._encounter_folder(eid)
+            folder = sm.get_encounter_folder(eid)
             if not folder.exists():
                 _logger().warning("[SYNC] Folder missing for %s", eid)
                 continue
@@ -114,7 +114,7 @@ class SyncManager:
             eid = enc.get("encounter_id", "")
             if not eid:
                 continue
-            folder = sm._encounter_folder(eid)
+            folder = sm.get_encounter_folder(eid)
             if not folder.exists():
                 result["failed"] += 1
                 continue

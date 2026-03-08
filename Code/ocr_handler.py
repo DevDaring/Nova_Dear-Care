@@ -99,13 +99,15 @@ def extract_text(image_path: str, prefer_online: bool = True) -> str:
     if prefer_online and check_internet():
         text = _textract_extract(image_path)
         if text:
+            _logger().info("[OCR] PRIMARY: AWS Textract — %d chars extracted", len(text))
             return text
-        _logger().info("[OCR] Textract failed, falling back to PaddleOCR")
+        _logger().info("[OCR] Textract returned empty, falling back to PaddleOCR")
 
     try:
         text = _paddle_extract(image_path)
         if text:
-            _logger().info("[OCR] PaddleOCR extracted %d chars", len(text))
+            reason = "offline" if not check_internet() else "Textract failed"
+            _logger().info("[OCR] FALLBACK: PaddleOCR (reason: %s) — %d chars extracted", reason, len(text))
         return text
     except Exception as e:
         _logger().error("[OCR] PaddleOCR error: %s", e)
