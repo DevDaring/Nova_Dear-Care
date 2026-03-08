@@ -46,7 +46,10 @@ class GuidedFlow:
     # ------------------------------------------------------------------
 
     def _speak(self, text: str):
-        print(f"\n  Asha: {text}")
+        try:
+            print(f"\n  Asha: {text}")
+        except BrokenPipeError:
+            pass
         if self.use_voice:
             try:
                 self.vh.speak(text)
@@ -60,9 +63,15 @@ class GuidedFlow:
         import select
 
         if prompt:
-            print(f"\n  > {prompt} (or type & press Enter)", end="", flush=True)
+            try:
+                print(f"\n  > {prompt} (or type & press Enter)", end="", flush=True)
+            except BrokenPipeError:
+                pass
         else:
-            print("\n  > Listening... (or type & press Enter)", end="", flush=True)
+            try:
+                print("\n  > Listening... (or type & press Enter)", end="", flush=True)
+            except BrokenPipeError:
+                pass
 
         # Check for text input — wait up to 3 seconds for typing
         text_input = ""
@@ -73,17 +82,26 @@ class GuidedFlow:
             pass
 
         if text_input:
-            print(f"\n  You (text): {text_input}")
+            try:
+                print(f"\n  You (text): {text_input}")
+            except BrokenPipeError:
+                pass
             return text_input
 
         if self.use_voice:
             try:
                 resp = self.vh.listen(duration=duration)
                 if resp:
-                    print(f"\n  You: {resp}")
+                    try:
+                        print(f"\n  You: {resp}")
+                    except BrokenPipeError:
+                        pass
                 return resp or ""
             except Exception as e:
-                _logger().error("[GF-STT] %s", e)
+                try:
+                    _logger().error("[GF-STT] %s", e)
+                except Exception:
+                    pass
         return ""
 
     def _confirm(self, prompt: str) -> bool:

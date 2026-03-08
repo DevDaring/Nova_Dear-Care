@@ -321,7 +321,12 @@ def _try_transcribe_stt(audio_path: str) -> Tuple[str, float]:
 
             await handler.handle_events()
 
-        asyncio.run(_stream())
+        # Use a fresh event loop to avoid stale state / Broken pipe on reuse
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_stream())
+        finally:
+            loop.close()
 
         text = " ".join(final_transcript).strip()
         if text:
