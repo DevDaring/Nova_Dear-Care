@@ -363,12 +363,18 @@ def speak(text: str) -> bool:
 
 
 def listen(duration: int = 7) -> str:
-    """Record and transcribe (no wake word check)."""
+    """Record and transcribe (no wake word check). Retries once on empty result."""
     from config import TEMP_AUDIO_INPUT
     inp = str(TEMP_AUDIO_INPUT)
-    if record_audio(inp, duration):
-        text, _ = speech_to_text(inp)
-        return text
+    for attempt in range(2):
+        if record_audio(inp, duration):
+            text, _ = speech_to_text(inp)
+            if text:
+                return text
+            if attempt == 0:
+                _logger().info("[VOICE] STT returned empty, retrying recording...")
+        else:
+            break
     return ""
 
 

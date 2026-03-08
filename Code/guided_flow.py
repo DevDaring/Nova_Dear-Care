@@ -93,10 +93,12 @@ class GuidedFlow:
         if not resp:
             return False
         lower = resp.lower().strip()
+        # Strip punctuation from each word before matching
+        words = [re.sub(r'[^\w]', '', w) for w in lower.split() if re.sub(r'[^\w]', '', w)]
         # Check for affirmative words
-        if any(w in lower.split() for w in ["yes", "yeah", "yep", "ok", "okay", "sure",
-                                             "haan", "ji", "ha", "confirm", "correct",
-                                             "right", "absolutely", "affirmative"]):
+        if any(w in words for w in ["yes", "yeah", "yep", "ok", "okay", "sure",
+                                     "haan", "ji", "ha", "confirm", "correct",
+                                     "right", "absolutely", "affirmative"]):
             return True
         # Check for affirmative phrases
         if any(p in lower for p in ["that is correct", "that's correct", "that's right",
@@ -104,7 +106,7 @@ class GuidedFlow:
                                      "sounds correct", "go ahead"]):
             return True
         # Explicit denial
-        if any(w in lower.split() for w in ["no", "nope", "nah", "nahi", "na", "wrong", "galat"]):
+        if any(w in words for w in ["no", "nope", "nah", "nahi", "na", "wrong", "galat"]):
             return False
         # Default: if no denial words found and response is non-empty, treat as yes
         return True
@@ -132,10 +134,18 @@ class GuidedFlow:
 
             self._collect_aadhaar()
             self._lookup_patient()
+            self.enc.advance_from_demographics()
+
             self._health_inquiry()
+
             self._prescription_loop()
+            self.enc.advance_from_photo()
+
             self._pulse_reading()
             self._environment_reading()
+            self.enc.advance_from_vitals()
+            self.enc.advance_from_audio()
+
             self._final_analysis()
             self._save_and_wrap()
 
@@ -274,6 +284,11 @@ class GuidedFlow:
             self._collect_demographics()
             return
 
+        # If patient was already matched during Aadhaar collection, skip redundant lookup
+        if self.enc.data.get("patient_name"):
+            _logger().info("[GF] Patient already identified during Aadhaar collection, skipping lookup")
+            return
+
         existing = self.sm.find_by_aadhaar(self.aadhaar)
         if existing:
             name = existing.get("patient_name", "")
@@ -285,12 +300,6 @@ class GuidedFlow:
                 self.enc.data["aadhaar_number"] = self.aadhaar
                 _logger().info("[GF] Returning patient auto-matched: %s", name)
                 return
-
-        # First visit or no name on record — check if name was already collected with Aadhaar
-        if self.enc.data.get("patient_name"):
-            _logger().info("[GF] New patient, name already collected with Aadhaar")
-            self._collect_demographics_remaining()
-            return
 
         self._collect_demographics()
 
@@ -427,7 +436,8 @@ class GuidedFlow:
     def _prescription_loop(self):
         self._speak("Do you have any prescriptions or medical documents to scan?")
         resp = self._listen(duration=5)
-        if not resp or not any(w in resp.lower().split() for w in
+        words = [re.sub(r'[^\w]', '', w) for w in (resp or "").lower().split() if re.sub(r'[^\w]', '', w)]
+        if not resp or not any(w in words for w in
                                ["yes", "yeah", "yep", "ok", "haan", "ha", "ji"]):
             self._speak("Skipping prescription capture.")
             return
@@ -488,10 +498,7 @@ class GuidedFlow:
     def _pulse_reading(self):
         self._speak("Now let's measure the patient's pulse and oxygen level. "
                      "Please attach the pulse oximeter to the patient's finger.")
-
-        if not self._confirm("Is the sensor attached? Say yes when ready."):
-            self._speak("Skipping pulse measurement.")
-            return
+        time.sleep(3)  # Give time to attach sensor
 
         self._speak("Measuring now. Please hold still for 15 seconds.")
         try:
