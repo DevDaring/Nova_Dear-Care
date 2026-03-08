@@ -192,81 +192,220 @@ bus.close()
 
 ---
 
-## 4. MIPI Stereo Camera
+## 4. MIPI Stereo Camera (SC230AI)
 
 ### What It Does
 
 Captures patient photos, prescription images (for OCR), and wound documentation.
 
-### Connection
+### Camera Hardware
 
-The RDK S100 has MIPI CSI camera connectors. The SDK auto-detects the sensor on:
-- **vcon@0** → I2C bus 1, MIPI RX PHY 0
-- **vcon@1** → I2C bus 2, MIPI RX PHY 1
+| Item | Value |
+|------|-------|
+| Module | RDK Stereo Camera Module |
+| Sensor IC | SmartSens SC230AI (×2, stereo pair) |
+| Chip ID | `0xCB34` (registers 0x3107/0x3108) |
+| Resolution | 1920 × 1080 (2 MP per sensor) |
+| Format | RAW10 (Bayer, linear 10-bit bitpacked) |
+| Frame Rate | 30 fps |
+| MIPI | 1 data lane per sensor, 810 Mbps |
+| MCLK | 24 MHz (provided by Camera Expansion Board crystal) |
+| Left Sensor | I2C Bus 1, address `0x30`, MIPI RX PHY 0 |
+| Right Sensor | I2C Bus 2, address `0x32`, MIPI RX PHY 1 |
 
-Insert the ribbon cable into the **CAM** connector (not the DSI/display connector):
-1. Power off the board
-2. Lift the latch on the MIPI CSI connector
-3. Insert ribbon cable with **gold contacts facing the PCB** (towards the board)
-4. Close the latch firmly
-5. Power on
+### Step-by-Step Setup (New RDK S100 Kit)
+
+> **CRITICAL:** Follow ALL steps in order. Skipping the DIP switch step will result in `hs reception check error 0x10000` and the camera will NOT work. This took 25+ debugging attempts to discover.
+
+#### Step 1: Physical Camera Connection
+
+1. **Power OFF** the RDK S100 completely (unplug DC power)
+2. Attach the Camera Expansion Board to the 100-pin J25 connector on the RDK S100
+3. Verify the power LED (D2000) on the expansion board lights GREEN when powered
+4. Connect the stereo camera ribbon cable to connector **J2200** (left camera, MIPI RX PHY 0)
+5. For stereo: also connect to **J2201** (right camera, MIPI RX PHY 1)
+6. Ribbon cable: **gold contacts facing the PCB**
+
+#### Step 2: DIP Switch Configuration (MOST IMPORTANT STEP)
+
+> **Without this step, the camera WILL NOT output any MIPI data.** The SC230AI sensor needs a 24 MHz master clock (MCLK). The RDK S100 SoC CANNOT provide MCLK through software — the MIPI host driver has no clock framework support (empty stubs). The MCLK must come from the Camera Expansion Board's onboard 24 MHz crystal oscillator.
+
+**SW2200 — SET TO MCLK (DOWN position):**
+```
+┌─────────────────────────────────────────────┐
+│   DIP Switch SW2200 (on Camera Expansion Board)   │
+│   Located near MIPI camera connectors J2200/J2201 │
+│                                                   │
+│   ┌─────┬─────┐                                   │
+│   │  1  │  2  │                                   │
+│   ├─────┼─────┤                                   │
+│   │  ↓  │  ↓  │  ← BOTH switches DOWN = MCLK     │
+│   └─────┴─────┘                                   │
+│   DOWN = MCLK ✅ (provides 24 MHz clock to sensor)│
+│   UP   = LPWM ❌ (NO clock — camera will fail)    │
+└─────────────────────────────────────────────┘
+```
+
+**SW2201 — KEEP AT 3.3V (UP position):**
+```
+┌─────────────────────────────────────────────┐
+│   DIP Switch SW2201 — DO NOT CHANGE          │
+│   ┌─────┬─────┐                              │
+│   │  ↑  │  ↑  │  ← BOTH switches UP = 3.3V  │
+│   └─────┴─────┘                              │
+│   UP = 3.3V ✅                               │
+└─────────────────────────────────────────────┘
+```
+
+> **WARNING:** The official D-Robotics documentation says SC230AI uses SW2200=LPWM. **This is WRONG for the RDK S100.** The S100 SoC's MIPI host driver cannot output MCLK (camera clock subsystem uses empty stubs). You MUST set SW2200=MCLK to feed the 24 MHz crystal oscillator clock from the expansion board directly to the sensor.
+
+#### Step 3: Power On and Verify I2C
+
+```bash
+# Power on the board, wait ~60 seconds for full boot
+
+# Verify left sensor on I2C bus 1 — should show 0x30, 0x50, 0x58
+sudo i2cdetect -y 1
+
+# Verify right sensor on I2C bus 2 — should show 0x32, 0x50, 0x58
+sudo i2cdetect -y 2
+
+# Confirm chip ID = 0xCB34 (SC230AI)
+sudo i2ctransfer -f -y 1 w2@0x30 0x31 0x07 r1   # Should return 0xcb
+sudo i2ctransfer -f -y 1 w2@0x30 0x31 0x08 r1   # Should return 0x34
+```
+
+#### Step 4: Capture a Test Frame
+
+```bash
+cd /app/multimedia_samples/sample_vin/get_vin_data
+
+# Sensor index 6 = SC230AI. Pipe "g" to capture a single frame, "q" to quit.
+printf 'g\nq\n' | sudo timeout 15 ./get_vin_data -s 6
+```
+
+**Expected kernel log (check with `dmesg | tail -30`):**
+```
+[SENSOR0]: sc230ai open i2c1@0x30                 ✅
+[RX0]: mclk 24 ignore                              ✅ (harmless — clock comes from expansion board)
+[RX0]: entry hs reception                          ✅ SUCCESS — MIPI data flowing!
+```
+
+**If you see `[RX0]: hs reception check error 0x10000` → SW2200 is NOT set to MCLK. Go back to Step 2.**
+
+#### Step 5: Decode the RAW10 Image
+
+The captured `.raw` file is **linear 10-bit bitpacked** Bayer data (NOT MIPI CSI-2 packed). Each row = 2400 bytes for 1920 pixels (1920 × 10 bits / 8 = 2400 bytes). Every 5 bytes contain 4 pixels packed as a continuous 40-bit little-endian bitstream.
+
+```python
+import numpy as np
+import cv2
+
+# Load the RAW file (adjust filename from get_vin_data output)
+raw = np.fromfile("handle_XXXXX_chn0_1920x1080_stride_2400_frameid_N_ts_XXXXXX.raw", dtype=np.uint8)
+data = raw.reshape(1080, 2400)
+
+# Unpack linear 10-bit bitpacked → 16-bit pixels
+packed = data.reshape(1080, 480, 5)  # 1920/4 = 480 groups of 5 bytes
+b = packed.astype(np.uint64)
+val40 = b[:,:,0] | (b[:,:,1] << 8) | (b[:,:,2] << 16) | (b[:,:,3] << 24) | (b[:,:,4] << 32)
+
+img = np.zeros((1080, 1920), dtype=np.uint16)
+img[:, 0::4] = ((val40 >>  0) & 0x3FF).astype(np.uint16)
+img[:, 1::4] = ((val40 >> 10) & 0x3FF).astype(np.uint16)
+img[:, 2::4] = ((val40 >> 20) & 0x3FF).astype(np.uint16)
+img[:, 3::4] = ((val40 >> 30) & 0x3FF).astype(np.uint16)
+
+# Demosaic (SC230AI uses BGGR Bayer pattern) + gamma correction
+img16 = (img << 6).astype(np.uint16)
+color = cv2.cvtColor(img16, cv2.COLOR_BayerBG2BGR)
+color_f = color.astype(np.float32) / 65535.0
+color_gamma = np.power(np.clip(color_f, 0, 1), 1.0/2.2)  # Apply gamma 2.2
+
+# Auto white balance (gray world)
+means = color_gamma.mean(axis=(0,1))
+wb = means.mean() / (means + 1e-6)
+result = np.clip(color_gamma * wb[np.newaxis, np.newaxis, :], 0, 1)
+
+# Contrast stretch
+p1, p99 = np.percentile(result, (1, 99))
+result = np.clip((result - p1) / (p99 - p1), 0, 1)
+
+cv2.imwrite("camera_output.jpg", (result * 255).astype(np.uint8), [cv2.IMWRITE_JPEG_QUALITY, 95])
+print("Saved camera_output.jpg")
+```
+
+### RAW10 Format Details
+
+> **CRITICAL for any developer decoding the image: The RDK S100 get_vin_data outputs LINEAR 10-bit bitpacked, NOT MIPI CSI-2 packed RAW10.**
+
+| Format | Byte Layout (4 pixels) | Notes |
+|--------|----------------------|-------|
+| **Linear 10-bit (THIS ONE)** | 5 bytes = 40-bit LE bitstream; pixel0=bits[0:9], pixel1=bits[10:19], pixel2=bits[20:29], pixel3=bits[30:39] | Used by RDK S100 `get_vin_data` |
+| MIPI CSI-2 RAW10 | 5 bytes: [P0_MSB] [P1_MSB] [P2_MSB] [P3_MSB] [P0_LSB|P1_LSB|P2_LSB|P3_LSB] | NOT what RDK S100 outputs |
+
+If you use the wrong unpacking method, the image will look like colored noise / static. The histogram will show false peaks at 256-value intervals.
 
 ### Packages / Libraries Used
 
 ```bash
-# Pre-installed on RDK S100
-# hobot-vio 4.0.4 provides libsrcampy
-python3 -c "from hobot_vio import libsrcampy; print('hobot_vio OK')"
+# get_vin_data is pre-installed (C binary with full sensor list including SC230AI)
+ls /app/multimedia_samples/sample_vin/get_vin_data/get_vin_data
+
+# For image decoding
+pip3 install numpy opencv-python-headless Pillow
 ```
 
-**Key:** The camera is accessed using `hobot_vio.libsrcampy` — the D-Robotics native camera API. **Not ROS2.**
+### Python API Limitation
 
-### Supported Sensors
+> **IMPORTANT:** The Python camera API (`hobot_vio.libsrcampy`) does NOT support SC230AI — it only has `imx219`, `ar0820std`, and `ovx8bstd` in its compiled sensor list. The OVX8B wildcard chip_id=0xA55A will falsely match the SC230AI and fail. **Use the C binary `get_vin_data -s 6` instead.**
 
-The SDK includes drivers for these sensors (found in `/app/multimedia_samples/vp_sensors/`):
-- IMX219, SC132GS, SC230AI, SC1336, AR0820C, OVX3C
-
-### How to Verify Connection
+### How to Verify
 
 ```bash
-# Check if sensor appears on I2C bus 1 or 2
-i2cdetect -y 1    # Camera connector 0
-i2cdetect -y 2    # Camera connector 1
+# 1. I2C detection
+sudo i2cdetect -y 1 | grep -q "30" && echo "Left sensor OK" || echo "Left sensor NOT found"
+sudo i2cdetect -y 2 | grep -q "32" && echo "Right sensor OK" || echo "Right sensor NOT found"
 
-# Python quick test (must use env prefix!)
-env -u LD_LIBRARY_PATH -u LD_PRELOAD python3 -c "
-from hobot_vio import libsrcampy
-cam = libsrcampy.Camera()
-ret = cam.open_cam(0, -1, 30, 1920, 1080)
-print(f'open_cam ret={ret}')
-if ret == 0:
-    print('Camera DETECTED and WORKING!')
-    cam.close_cam()
-else:
-    print('Camera NOT detected — check cable')
-"
+# 2. Chip ID verification
+LEFT_HI=$(sudo i2ctransfer -f -y 1 w2@0x30 0x31 0x07 r1 2>/dev/null)
+LEFT_LO=$(sudo i2ctransfer -f -y 1 w2@0x30 0x31 0x08 r1 2>/dev/null)
+echo "Left sensor chip ID: ${LEFT_HI}${LEFT_LO} (expect 0xcb 0x34 = SC230AI)"
+
+# 3. Capture test frame
+cd /app/multimedia_samples/sample_vin/get_vin_data
+printf 'g\nq\n' | sudo timeout 15 ./get_vin_data -s 6
+
+# 4. Check kernel log
+dmesg | grep -E "hs reception|mclk|sc230" | tail -5
+# SUCCESS: "entry hs reception" (no error number)
+# FAILURE: "hs reception check error 0x10000" → Fix SW2200 DIP switch
 ```
 
 ### How It Works in Code
 
 - File: `camera_handler.py`
-- API: `libsrcampy.Camera()` → `open_cam(pipe_id, video_index, fps, width, height)` → `get_img(channel, w, h)` → `close_cam()`
-- Image format: NV12 (YUV) → Converted to BGR using `cv2.cvtColor(nv12, cv2.COLOR_YUV2BGR_NV12)`
-- Parameters: `pipe_id=0`, `video_index=-1` (auto-detect), `fps=30`, resolution `1920x1080`
+- Capture: Runs `get_vin_data -s 6` via subprocess to capture RAW10 frame
+- Decode: Linear 10-bit bitpacked → 16-bit → Bayer BGGR demosaic → gamma 2.2 → auto white balance
+- Output: BGR image (numpy array or JPEG file)
 
 ### Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| `No camera sensor found` | Reseat MIPI cable; ensure correct connector (CAM, not DSI) |
-| `open_cam returned -1` | Sensor not detected on I2C — ribbon cable loose or wrong connector |
-| `pipeline stop failed` | Camera resource busy — reboot and try again |
-| Works in C samples but not Python | Always use `env -u LD_LIBRARY_PATH -u LD_PRELOAD` |
-| Which connector? | Try both MIPI connectors — board has vcon@0 (bus 1) and vcon@1 (bus 2) |
+| `hs reception check error 0x10000` | **SW2200 not set to MCLK.** Power off, flip SW2200 DOWN (MCLK), retest |
+| `mclk 24 ignore` | Normal/harmless — SoC can't output MCLK, clock comes from expansion board |
+| `No sensor found on i2cdetect` | Reseat MIPI ribbon cable; gold contacts face PCB; check correct connector |
+| `create_and_run_vflow failed, ret -36` | MIPI HS reception failed — fix MCLK (SW2200=MCLK) |
+| Image looks like colored noise | Wrong RAW10 decode — use LINEAR 10-bit unpack, not MIPI CSI-2 |
+| Image has false color / wrong tint | Try different Bayer pattern (BGGR is default for SC230AI) |
+| `open_cam returned -1` (Python API) | Python API doesn't support SC230AI — use `get_vin_data -s 6` instead |
+| `snrclk not support` | Expected — S100 driver has empty clock stubs. Ignore if SW2200=MCLK |
+| OVX8B misidentified | SC230AI caught by OVX8B wildcard chip_id in libsrcampy. Use C API instead |
 
 ### Current Status
 
-**NOT CONNECTED** — `open_cam()` returns -1. The SDK searches I2C bus 1 and bus 2 but finds no sensor. Physical cable needs reseating or camera may be on wrong connector. The board has multiple MIPI connectors — try the other one.
+**CONNECTED & WORKING** — SW2200=MCLK, camera captures 1920x1080 RAW10 frames at 30fps. Decode with linear 10-bit unpack + BayerBG demosaic + gamma correction.
 
 ---
 

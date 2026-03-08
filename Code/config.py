@@ -68,13 +68,13 @@ ASSISTANT_NAME = "Asha"
 WAKE_PHRASES = ["hello asha", "ok asha", "okay asha", "hey asha", "hi asha"]
 
 # ============================================================
-# CAMERA CONFIGURATION (hobot_vio libsrcampy — RDK S100 MIPI)
+# CAMERA CONFIGURATION (SC230AI via get_vin_data — RDK S100 MIPI)
 # ============================================================
-CAMERA_PIPE_ID = 0        # MIPI pipeline index
+CAMERA_SENSOR_INDEX = 6   # SC230AI in get_vin_data sensor list
 CAMERA_FPS = 30
 CAMERA_WIDTH = 1920
 CAMERA_HEIGHT = 1080
-CAMERA_TIMEOUT_SEC = 10.0
+CAMERA_TIMEOUT_SEC = 15.0
 SNAPSHOT_PREFIX = "patient_"
 
 # ============================================================
