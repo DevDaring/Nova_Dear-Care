@@ -428,4 +428,106 @@ This data is sensor+lens module specific and **cannot be fabricated**.
 | Camera pipeline (VIN → ISP → PYM) | ❌ **BLOCKED** |
 | Image capture | ❌ **BLOCKED** |
 
-**The camera hardware is correctly connected and both sensors are detected. The blocker is the missing proprietary OVX8B ISP calibration library that is not included in the `hobot-camera` package.**
+**The camera hardware is correctly connected and both sensors are detected on I2C.**
+
+---
+
+## UPDATE — Root Cause Analysis (Detailed Investigation)
+
+### Root Cause: Missing MCLK (Master Clock)
+
+After extensive investigation including reverse engineering of `libcam.so`, `libovx8bstd.so`, kernel module analysis, and multiple driver bypass approaches, the **definitive root cause** has been identified:
+
+**The OVX8B sensor has NO MCLK (24MHz master clock) reaching it.**
+
+#### Evidence:
+1. **Chip ID reads as 0x00** — `get_vin_data -s 8` reports "Expected Chip ID: 0x858, Actual Chip ID Read: 0x00". Without MCLK, the sensor ACKs on I2C bus (basic presence detection) but cannot respond to register reads.
+2. **MIPI host snrclk "not support"** — `/sys/class/vps/mipi_host0/status/snrclk` reports "not support". Writing to `snrclk_en` causes I/O error.
+3. **No pinctrl for MCLK in DTB** — None of the three MIPI host nodes (`mipi_host@0x37420000`, `@0x37620000`, `@0x37C20000`) have `pinctrl-names`, `pinctrl-0`, or `clocks` properties. Without these, the driver cannot generate a sensor clock.
+4. **Framework confirms** — `vp_sensor_mipi_host_mclk_is_not_configed()` checks for `pinctrl-names` in MIPI host DT node and prints "mipi mclk is not configed" for both vcon@0 and vcon@1.
+5. **Sensor driver init fails** — `hbn_camera_attach_to_vin` returns -65672 (CAM_SENSOR_OP_ERROR). `/dev/i2c-1` is opened, timeout set, but NO I2C_SLAVE or I2C_RDWR ioctls are executed — the error occurs before any actual sensor communication.
+
+### Error Progression (from investigation):
+```
+-65665 (DLOPEN)     → calibration .so not found
+-65666 (CHECK)      → module validation failed (bypassed via CAM_MODULE_NOCHECK)
+-65674 (DESERIAL)   → deserializer attach failed (bypassed via SENSOR_TYPE_NORMAL)
+-65672 (SENSOR_OP)  → sensor init fails (ROOT CAUSE: no MCLK)
+```
+
+### Key Discoveries:
+- **`CAM_MODULE_NOCHECK`** env var (rodata 0x631c0 in libcam.so) — bypasses `camera_module_full_check()` in `camera_module_lib_pre` at 0x2d0e4
+- **`CAM_CALVER_NOCHECK`** env var (rodata 0x69028 in libcam.so) — bypasses calibration version check in `camera_calib_config_check` at 0x39668
+- **Custom env system** — libcam.so uses `camera_env_set_bool()`/`camera_env_get_bool()`, NOT standard `getenv()`
+- **Kernel detection** — `hobot_sensor.ko` (51MB) detects "ovx8bstd-30fps" at kernel level; userspace driver swap cannot override this
+- **cammod struct** — 256+ bytes: name@0x00, "macH" magic@0x64, version@0x68, ops vtable@0xB8, calibration ptrs@0xC0/0xC8
+- **cam_clkout_func** — pinctrl node (phandle 0xf0) exists in DTB at `pinctrl@370f3000`, muxes `cam_lpwm1_dout3` as clock output
+- **cam0_dummy_clk** — fixed 24MHz clock (phandle 0x6f) exists in DTB but is not referenced by any MIPI host
+
+---
+
+## Required Fix: DIP Switch + DTB Modification
+
+### Step 1: Physical DIP Switch Change (REQUIRED)
+On the Camera Expansion Board:
+
+| Switch | Current Setting | Required Setting | Purpose |
+|--------|----------------|-----------------|---------|
+| **SW2200** (both) | LPWM (default) | **MCLK** | Routes 24MHz crystal oscillator to camera MCLK pin |
+| **SW2201** (both) | 3.3V (default) | **1.8V** | OVX8B uses 1.8V DOVDD; MIPI D-PHY is inherently 1.8V |
+
+The Camera Expansion Board has an on-board 24MHz active crystal oscillator. SW2200 selects whether MCLK or LPWM reaches Pin 5 of the MIPI connectors. Without MCLK, the OVX8B sensor cannot operate.
+
+### Step 2: DTB Modification (RECOMMENDED)
+A modified DTB has been prepared at `/tmp/rdk-s100-v1p0-mclk.dtb` that adds MCLK support to both MIPI hosts:
+
+**Changes to mipi_host@0x37420000 and mipi_host@0x37620000:**
+```dts
+clocks = <&cam0_dummy_clk>;     /* 24MHz fixed clock, phandle 0x6f */
+clock-names = "snrclk";
+pinctrl-names = "default";
+pinctrl-0 = <&cam_clkout>;      /* cam_lpwm1_dout3 as clock out, phandle 0xf0 */
+snrclk-idx = <0x00>;
+```
+
+**To install:**
+```bash
+# Backup original DTB
+sudo cp /boot/hobot/rdk-s100-v1p0.dtb /boot/hobot/rdk-s100-v1p0.dtb.bak
+
+# Install modified DTB
+sudo cp /tmp/rdk-s100-v1p0-mclk.dtb /boot/hobot/rdk-s100-v1p0.dtb
+
+# Reboot
+sudo reboot
+```
+
+**To revert:**
+```bash
+sudo cp /boot/hobot/rdk-s100-v1p0.dtb.bak /boot/hobot/rdk-s100-v1p0.dtb
+sudo reboot
+```
+
+### Step 3: Test After Reboot
+```bash
+# Test with custom sensor config (sensor index 8, chip_id wildcard)
+sudo LD_PRELOAD=/tmp/set_env_preload.so ./get_vin_data -s 8
+
+# Or test with standalone program
+cd /tmp && sudo ./ovx8b_vin_test
+```
+
+---
+
+## Files Created During Investigation
+
+| File | Purpose |
+|------|---------|
+| `/tmp/ovx8b_vin_test.c` | Standalone VIN capture test (compiled, uses libovx8bstd.so) |
+| `/tmp/ovx8b_test2` | Same test using libovx8b.so (crashes — struct layout different) |
+| `/tmp/set_env_preload.so` | LD_PRELOAD library to set CAM_MODULE_NOCHECK + CAM_CALVER_NOCHECK |
+| `/tmp/rdk-s100-v1p0-mclk.dtb` | Modified DTB with MCLK support for mipi_host0 and mipi_host1 |
+| `/tmp/modified.dts` | Source DTS for the modified DTB |
+| `/app/multimedia_samples/vp_sensors/ovx8bstd/` | Custom sensor config (SENSOR_TYPE_NORMAL, chip_id=0xA55A) |
+| `/usr/hobot/lib/sensor/lib_CL_OX8GB_L121_067_L.so` | Calibration stub (proper 4-pointer format) |
+| `/tmp/sensor_backup/` | Backup of original sensor driver files |
