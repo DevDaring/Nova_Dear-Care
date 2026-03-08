@@ -382,18 +382,25 @@ class GuidedFlow:
 
     # --- Stage 6: Prescription Capture Loop ---
 
+    def _beep(self):
+        """Play a beep sound to signal upcoming capture/measurement."""
+        from voice_handler import _play_beep
+        _play_beep()
+
     def _prescription_loop_direct(self):
         """Directly start prescription capture (skip the 'do you have prescriptions?' question)."""
         all_text = []
         photo_num = 0
 
         while self._running:
-            self._speak("Place the document in front of the camera. Capturing now.")
-            time.sleep(1)
+            self._speak("Place the document in front of the camera.")
+            self._beep()
+            time.sleep(3)
 
             try:
                 from camera_handler import capture_image
                 img_path = capture_image()
+                self._beep()  # signal capture complete
                 if not img_path:
                     self._speak("Could not capture. Check the camera connection.")
                     break
@@ -446,12 +453,14 @@ class GuidedFlow:
         photo_num = 0
 
         while self._running:
-            self._speak("Place the document in front of the camera. Capturing now.")
-            time.sleep(1)
+            self._speak("Place the document in front of the camera.")
+            self._beep()
+            time.sleep(3)
 
             try:
                 from camera_handler import capture_image
                 img_path = capture_image()
+                self._beep()  # signal capture complete
                 if not img_path:
                     self._speak("Could not capture. Check the camera connection.")
                     break
@@ -498,7 +507,8 @@ class GuidedFlow:
     def _pulse_reading(self):
         self._speak("Now let's measure the patient's pulse and oxygen level. "
                      "Please attach the pulse oximeter to the patient's finger.")
-        time.sleep(3)  # Give time to attach sensor
+        self._beep()
+        time.sleep(3)
 
         self._speak("Measuring now. Please hold still for 15 seconds.")
         try:
@@ -519,9 +529,11 @@ class GuidedFlow:
                     report_parts.append(f"Oxygen level: {spo2:.0f}%")
                 if hr is not None:
                     report_parts.append(f"Heart rate: {hr:.0f} beats per minute")
+                self._beep()  # signal measurement complete
                 self._speak(". ".join(report_parts) + ".")
                 _logger().info("[GF] Vitals — SpO2: %s, HR: %s", spo2, hr)
             else:
+                self._beep()
                 self._speak("Could not get a reading. Check sensor placement and try again.")
         except Exception as e:
             _logger().error("[GF] Pulse reading error: %s", e)
@@ -531,6 +543,8 @@ class GuidedFlow:
 
     def _environment_reading(self):
         self._speak("Reading environmental conditions.")
+        self._beep()
+        time.sleep(3)
         try:
             from sensor_handler import SensorHandler
             sh = SensorHandler()
@@ -546,6 +560,8 @@ class GuidedFlow:
 
             if pressure is not None:
                 self.env_data["pressure"] = pressure
+
+            self._beep()  # signal measurement complete
 
             parts = []
             if temp is not None:

@@ -174,17 +174,32 @@ def capture_image(output_path: Optional[str] = None, timeout_sec: float = 15.0) 
             except OSError:
                 pass
 
-        # Run get_vin_data: send "g" (grab frame) then "q" (quit)
-        proc = subprocess.run(
+        # Run get_vin_data with multiple grabs so AEC (auto-exposure) settles.
+        # First frames are dark; grab 5 frames with delays, keep the last one.
+        proc = subprocess.Popen(
             ["sudo", _GET_VIN_DATA, "-s", str(_SENSOR_INDEX)],
-            input="g\nq\n",
-            capture_output=True, text=True,
-            timeout=timeout_sec,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
             cwd=capture_dir,
         )
-
-        if proc.returncode != 0 and "failed" in (proc.stdout + proc.stderr).lower():
-            _logger().warning("[CAMERA] get_vin_data failed: %s", proc.stdout[-200:] if proc.stdout else proc.stderr[-200:])
+        try:
+            # Grab multiple frames to let AEC/AGC converge
+            for i in range(5):
+                proc.stdin.write("g\n")
+                proc.stdin.flush()
+                time.sleep(0.5)
+            proc.stdin.write("q\n")
+            proc.stdin.flush()
+            proc.wait(timeout=timeout_sec)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            _logger().warning("[CAMERA] get_vin_data timed out after %.0fs", timeout_sec)
+            return None
+        except Exception as e:
+            proc.kill()
+            _logger().warning("[CAMERA] get_vin_data error: %s", e)
             return None
 
         # Find the newly created .raw file
