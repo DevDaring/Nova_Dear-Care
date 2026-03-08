@@ -54,19 +54,20 @@ class GuidedFlow:
                 _logger().error("[GF-TTS] %s", e)
 
     def _listen(self, prompt: str = "", duration: int = 7) -> str:
-        """Get user input via voice or text fallback."""
+        """Get user input via voice or text fallback.
+        User can type on terminal and press Enter, or speak after the beep."""
         import sys
         import select
 
         if prompt:
-            print(f"\n  > {prompt}", end="", flush=True)
+            print(f"\n  > {prompt} (or type & press Enter)", end="", flush=True)
         else:
-            print("\n  > Listening... ", end="", flush=True)
+            print("\n  > Listening... (or type & press Enter)", end="", flush=True)
 
-        # Check for text input first
+        # Check for text input — wait up to 3 seconds for typing
         text_input = ""
         try:
-            if select.select([sys.stdin], [], [], 0.3)[0]:
+            if select.select([sys.stdin], [], [], 3.0)[0]:
                 text_input = sys.stdin.readline().strip()
         except Exception:
             pass
@@ -92,7 +93,21 @@ class GuidedFlow:
         if not resp:
             return False
         lower = resp.lower().strip()
-        return any(w in lower.split() for w in ["yes", "yeah", "yep", "ok", "okay", "sure", "haan", "ji", "ha", "confirm"])
+        # Check for affirmative words
+        if any(w in lower.split() for w in ["yes", "yeah", "yep", "ok", "okay", "sure",
+                                             "haan", "ji", "ha", "confirm", "correct",
+                                             "right", "absolutely", "affirmative"]):
+            return True
+        # Check for affirmative phrases
+        if any(p in lower for p in ["that is correct", "that's correct", "that's right",
+                                     "that is right", "is correct", "sounds right",
+                                     "sounds correct", "go ahead"]):
+            return True
+        # Explicit denial
+        if any(w in lower.split() for w in ["no", "nope", "nah", "nahi", "na", "wrong", "galat"]):
+            return False
+        # Default: if no denial words found and response is non-empty, treat as yes
+        return True
 
     # ------------------------------------------------------------------
     # Flow stages
@@ -181,9 +196,9 @@ class GuidedFlow:
     # --- Stage 3: Collect Aadhaar ---
 
     def _collect_aadhaar(self):
-        self._speak("Please tell me the patient's 12-digit Aadhaar number.")
+        self._speak("Please tell me the patient's 12-digit Aadhaar number. Take your time.")
         for attempt in range(3):
-            resp = self._listen(duration=10)
+            resp = self._listen(duration=15)
             if not resp:
                 if attempt < 2:
                     self._speak("I didn't hear that. Please say the Aadhaar number again.")
@@ -263,19 +278,42 @@ class GuidedFlow:
         self._collect_demographics()
 
     def _collect_demographics(self):
-        self._speak("Please tell me the patient's name, age, and gender.")
-        resp = self._listen(duration=10)
-        if resp:
-            info = self.enc.parse_demographics(resp)
-            self.enc.set_demographics(
-                name=info.get("name", ""),
-                age=info.get("age", ""),
-                gender=info.get("gender", ""),
-            )
-            name = info.get("name", "the patient")
-            self._speak(f"Registered {name}.")
+        # Ask name
+        self._speak("Please tell me the patient's name.")
+        name_resp = self._listen(duration=8)
+        patient_name = ""
+        if name_resp:
+            import re as _re
+            name_words = [w for w in name_resp.split()
+                          if _re.sub(r'[^a-zA-Z]', '', w) and w.lower() not in
+                          {"years", "year", "old", "male", "female", "patient", "name", "age", "gender", "my", "is", "i", "am"}]
+            patient_name = " ".join(name_words[:3]).strip()
+
+        # Ask age
+        self._speak("What is the patient's age?")
+        age_resp = self._listen(duration=5)
+        age = ""
+        if age_resp:
+            age_match = re.search(r'(\d{1,3})', age_resp)
+            if age_match:
+                age = age_match.group(1)
+
+        # Ask gender
+        self._speak("What is the patient's gender? Male or female?")
+        gender_resp = self._listen(duration=5)
+        gender = ""
+        if gender_resp:
+            lower = gender_resp.lower()
+            if any(w in lower for w in ["female", "woman", "girl", "mahila", "lady", "aurat"]):
+                gender = "F"
+            elif any(w in lower for w in ["male", "man", "boy", "aadmi"]):
+                gender = "M"
+
+        self.enc.set_demographics(name=patient_name, age=age, gender=gender)
+        if patient_name:
+            self._speak(f"Registered {patient_name}, age {age or 'unknown'}, gender {gender or 'unknown'}.")
         else:
-            self._speak("No demographics captured. Continuing.")
+            self._speak("Demographics saved.")
 
     def _collect_demographics_remaining(self):
         """Collect age and gender when name was already captured with Aadhaar."""
@@ -299,6 +337,16 @@ class GuidedFlow:
         self._speak("What symptoms or health concerns does the patient have?")
         resp = self._listen(duration=15)
         if resp:
+            # Check if the user is asking for prescription capture instead of reporting symptoms
+            lower = resp.lower()
+            prescription_words = ["prescription", "snap", "capture", "photo", "picture",
+                                  "camera", "scan", "document", "look at", "take", "image"]
+            if any(w in lower for w in prescription_words):
+                self._speak("It sounds like you want to capture a prescription. Let me do that.")
+                _logger().info("[GF] Health inquiry redirected to prescription capture")
+                self._prescription_loop_direct()
+                return
+
             self.symptoms = resp
             self.enc.data["notes"] = (self.enc.data.get("notes", "") + " Symptoms: " + resp).strip()
             self._speak("Symptoms noted.")
@@ -307,6 +355,57 @@ class GuidedFlow:
             self._speak("No symptoms reported. Continuing.")
 
     # --- Stage 6: Prescription Capture Loop ---
+
+    def _prescription_loop_direct(self):
+        """Directly start prescription capture (skip the 'do you have prescriptions?' question)."""
+        all_text = []
+        photo_num = 0
+
+        while self._running:
+            self._speak("Place the document in front of the camera. Capturing now.")
+            time.sleep(1)
+
+            try:
+                from camera_handler import capture_image
+                img_path = capture_image()
+                if not img_path:
+                    self._speak("Could not capture. Check the camera connection.")
+                    break
+
+                self.enc.save_photo(img_path)
+                photo_num += 1
+
+                self._speak("Reading the document.")
+                from ocr_handler import extract_text, unload_ocr
+                text = extract_text(img_path)
+                unload_ocr()
+                gc.collect()
+
+                if text:
+                    all_text.append(text)
+                    if check_internet():
+                        from aws_handler import analyze_prescription
+                        analysis = analyze_prescription(text)
+                        if analysis:
+                            self._speak(analysis)
+                        else:
+                            self._speak(f"I read: {text[:200]}")
+                    else:
+                        self._speak(f"I read: {text[:200]}")
+                else:
+                    self._speak("No text found. Try with a clearer picture.")
+
+                free_memory()
+
+            except Exception as e:
+                _logger().error("[GF] Prescription capture error: %s", e)
+                self._speak("Error during capture.")
+
+            if not self._confirm("Do you have another document to scan?"):
+                break
+
+        self.prescriptions = "\n---\n".join(all_text)
+        _logger().info("[GF] Captured %d prescriptions (direct)", photo_num)
 
     def _prescription_loop(self):
         self._speak("Do you have any prescriptions or medical documents to scan?")
