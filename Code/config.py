@@ -63,7 +63,7 @@ TEMP_AUDIO_OUTPUT = TEMP_DIR / "voice_output.wav"
 # WAKE WORD CONFIGURATION
 # ============================================================
 WAKE_WORDS = ["asha"]
-WAKE_WORD_VARIATIONS = ["asha", "aasha", "asho", "aisha"]
+WAKE_WORD_VARIATIONS = ["asha", "aasha", "asho", "aisha", "aha", "ahsa", "arsha", "ashah"]
 ASSISTANT_NAME = "Asha"
 WAKE_PHRASES = ["hello asha", "ok asha", "okay asha", "hey asha", "hi asha"]
 
@@ -285,13 +285,18 @@ Patient data:
 - Heart Rate: {heart_rate} bpm
 - Temperature: {temperature}°C
 - Ambient Pressure: {pressure} hPa
+- On-device triage: {triage}
+
+Historical records (previous visits):
+{history}
 
 Provide:
-1. Overall assessment (1 sentence)
+1. Overall assessment (1-2 sentences, consider historical context if available)
 2. Key concerns (bullet points)
 3. Recommendation: URGENT referral or ROUTINE follow-up
+4. If historical data available, note any trends or changes from previous visits
 
-Keep response under 5 sentences."""
+Keep response under 8 sentences."""
 
 # ============================================================
 # CSV SCHEMA

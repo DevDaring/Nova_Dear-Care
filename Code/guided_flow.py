@@ -411,7 +411,7 @@ class GuidedFlow:
     # --- Stage 5: Health Inquiry ---
 
     def _health_inquiry(self):
-        self._speak("What symptoms or health concerns does the patient have?")
+        self._speak("What symptoms or health concerns does the patient have? Please describe in detail.")
         resp = self._listen(duration=15)
         if resp:
             # Check if the user is asking for prescription capture instead of reporting symptoms
@@ -424,6 +424,16 @@ class GuidedFlow:
                 self._prescription_loop_direct()
                 self._prescriptions_done = True
                 return
+
+            # If symptoms are too short/incomplete, ask to elaborate
+            word_count = len(resp.split())
+            if word_count < 5:
+                _logger().info("[GF] Symptoms too short (%d words: '%s'), asking to elaborate", word_count, resp)
+                self._speak(f"I heard: {resp}. Can you tell me more about your symptoms?")
+                resp2 = self._listen(duration=15)
+                if resp2 and len(resp2.split()) > 2:
+                    resp = resp + ". " + resp2
+                    _logger().info("[GF] Symptoms extended: %s", resp[:150])
 
             self.symptoms = resp
             self.enc.data["notes"] = (self.enc.data.get("notes", "") + " Symptoms: " + resp).strip()
@@ -659,14 +669,40 @@ class GuidedFlow:
     # --- Stage 9: Final AI Analysis ---
 
     def _final_analysis(self):
-        # Run on-device triage first
+        # Run on-device triage (always runs, even offline)
+        triage_summary = ""
         try:
             triage_result = self.enc.run_triage(symptoms=self.symptoms)
-            self._speak(f"On-device assessment: {triage_result.summary()}")
+            triage_summary = triage_result.summary()
+            _logger().info("[GF] On-device triage: %s", triage_summary)
         except Exception as e:
             _logger().warning("[GF] On-device triage error: %s", e)
 
-        # Bedrock consolidated analysis
+        # Build historical context from previous encounters
+        history_text = "No previous visits found."
+        try:
+            if self.aadhaar:
+                past = self.sm.find_all_by_aadhaar(self.aadhaar)
+                # Exclude the current encounter
+                current_eid = self.enc.data.get("encounter_id", "")
+                past = [r for r in past if r.get("encounter_id") != current_eid]
+                if past:
+                    parts = []
+                    for r in past[-3:]:  # last 3 encounters max
+                        ts = r.get("timestamp", "unknown date")
+                        notes = r.get("notes", "")
+                        vitals_str = ""
+                        if r.get("spo2"): vitals_str += f"SpO2:{r['spo2']}% "
+                        if r.get("heart_rate"): vitals_str += f"HR:{r['heart_rate']} "
+                        if r.get("temperature"): vitals_str += f"Temp:{r['temperature']}°C "
+                        triage = r.get("triage_level", "")
+                        parts.append(f"  - {ts}: {vitals_str.strip()} Triage:{triage} Notes:{notes[:100]}")
+                    history_text = "\n".join(parts)
+                    _logger().info("[GF] Found %d historical encounters for analysis", len(past))
+        except Exception as e:
+            _logger().warning("[GF] Historical lookup error: %s", e)
+
+        # Bedrock consolidated analysis (includes triage + history)
         if check_internet():
             try:
                 from aws_handler import analyze_health_summary
@@ -675,9 +711,11 @@ class GuidedFlow:
                     prescriptions=self.prescriptions,
                     vitals=self.vitals,
                     env_data=self.env_data,
+                    triage=triage_summary,
+                    history=history_text,
                 )
                 if summary:
-                    self._speak("AI health summary: " + summary)
+                    self._speak("Health summary: " + summary)
                     self.enc.data["notes"] = (
                         self.enc.data.get("notes", "") + " AI Summary: " + summary[:300]
                     ).strip()
@@ -686,7 +724,11 @@ class GuidedFlow:
             except Exception as e:
                 _logger().warning("[GF] Bedrock analysis error: %s", e)
 
-        self._speak("AI analysis unavailable offline. Data saved for later review.")
+        # Fallback: speak on-device triage only when Bedrock is unavailable
+        if triage_summary:
+            self._speak(f"On-device assessment: {triage_summary}")
+        else:
+            self._speak("AI analysis unavailable offline. Data saved for later review.")
 
     # --- Stage 10: Save & Wrap Up ---
 

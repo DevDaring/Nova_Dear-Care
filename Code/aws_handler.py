@@ -199,8 +199,9 @@ def extract_aadhaar_llm(text: str) -> str:
     return ""
 
 
-def analyze_health_summary(symptoms: str, prescriptions: str, vitals: dict, env_data: dict) -> str:
-    """Generate consolidated health summary via Bedrock."""
+def analyze_health_summary(symptoms: str, prescriptions: str, vitals: dict, env_data: dict,
+                           triage: str = "", history: str = "") -> str:
+    """Generate consolidated health summary via Bedrock, including triage and historical data."""
     from config import HEALTH_SUMMARY_PROMPT
     prompt = HEALTH_SUMMARY_PROMPT.format(
         symptoms=symptoms or "None reported",
@@ -209,6 +210,8 @@ def analyze_health_summary(symptoms: str, prescriptions: str, vitals: dict, env_
         heart_rate=vitals.get("heart_rate", "N/A"),
         temperature=vitals.get("temperature", "N/A"),
         pressure=env_data.get("pressure", "N/A"),
+        triage=triage or "Not assessed",
+        history=history or "No previous visits found.",
     )
     return invoke_llm(prompt)
 

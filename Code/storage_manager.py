@@ -157,3 +157,9 @@ class StorageManager:
             return None
         matches = [r for r in self._read_all() if r.get("aadhaar_number") == aadhaar_number]
         return matches[-1] if matches else None
+
+    def find_all_by_aadhaar(self, aadhaar_number: str) -> List[Dict]:
+        """Find ALL encounters for an Aadhaar number, ordered oldest→newest."""
+        if not aadhaar_number:
+            return []
+        return [r for r in self._read_all() if r.get("aadhaar_number") == aadhaar_number]
