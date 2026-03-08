@@ -57,17 +57,22 @@ def setup_logging(log_dir=None):
     _logger = logging.getLogger("pocket_asha")
     _logger.setLevel(logging.INFO)
 
-    fh = logging.FileHandler(log_file)
-    fh.setLevel(logging.INFO)
-    ch = logging.StreamHandler(sys.stdout)
-    ch.setLevel(logging.INFO)
+    # Prevent duplicate handlers on repeated calls
+    if not _logger.handlers:
+        fh = logging.FileHandler(log_file)
+        fh.setLevel(logging.INFO)
+        # Only log to file; stdout goes through tee when piped
+        fmt = logging.Formatter("[%(asctime)s] %(levelname)s %(message)s", "%H:%M:%S")
+        fh.setFormatter(fmt)
+        _logger.addHandler(fh)
 
-    fmt = logging.Formatter("[%(asctime)s] %(levelname)s %(message)s", "%H:%M:%S")
-    fh.setFormatter(fmt)
-    ch.setFormatter(fmt)
+        # Add stdout handler only if NOT piped (i.e. no tee)
+        if sys.stdout.isatty():
+            ch = logging.StreamHandler(sys.stdout)
+            ch.setLevel(logging.INFO)
+            ch.setFormatter(fmt)
+            _logger.addHandler(ch)
 
-    _logger.addHandler(fh)
-    _logger.addHandler(ch)
     return _logger
 
 

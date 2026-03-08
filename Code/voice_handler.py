@@ -92,13 +92,14 @@ def _discover_mic() -> str:
     return default
 
 
-def record_audio(output_path: str, duration: int = 7, device: str = None) -> bool:
+def record_audio(output_path: str, duration: int = 7, device: str = None, beep: bool = True) -> bool:
     """Record WAV from Jabra mic. Returns True on success."""
     from config import JABRA_CAPTURE_DEV, AUDIO_SAMPLE_RATE, AUDIO_CHANNELS
     device = device or JABRA_CAPTURE_DEV
     if device.startswith("hw:"):
         device = "plug" + device
-    _play_beep()
+    if beep:
+        _play_beep()
     _release_audio_device()
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -312,11 +313,16 @@ def _try_transcribe_stt(audio_path: str) -> Tuple[str, float]:
             )
             handler = Handler(stream.output_stream)
 
-            # Stream audio chunks (8KB each)
+            # Stream audio chunks with throttling to simulate near-real-time
+            # (Transcribe Streaming drops audio if sent too fast in bulk)
             chunk_size = 8192
+            # Calculate real-time rate: 16kHz * 2 bytes = 32KB/s
+            # Send at ~4x real-time → ~8KB every ~31ms
+            send_interval = chunk_size / (16000 * 2 * 4)  # ~0.064s per 8KB chunk
             for i in range(0, len(audio_data), chunk_size):
                 chunk = audio_data[i:i + chunk_size]
                 await stream.input_stream.send_audio_event(audio_chunk=chunk)
+                await asyncio.sleep(send_interval)
             await stream.input_stream.end_stream()
 
             await handler.handle_events()
@@ -372,7 +378,8 @@ def listen(duration: int = 7) -> str:
     from config import TEMP_AUDIO_INPUT
     inp = str(TEMP_AUDIO_INPUT)
     for attempt in range(2):
-        if record_audio(inp, duration):
+        # Only beep on first attempt; retry is silent
+        if record_audio(inp, duration, beep=(attempt == 0)):
             text, _ = speech_to_text(inp)
             if text:
                 return text
