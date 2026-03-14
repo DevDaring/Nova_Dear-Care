@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
 """
-aws_handler.py - AWS Bedrock (LLM), S3, and Lambda integration for Pocket ASHA.
-Uses Amazon Nova Lite (amazon.nova-lite-v1:0) via Bedrock.
+aws_handler.py - AWS Bedrock (LLM), S3, Lambda, and Nova 2 Sonic integration for Dear-Care.
+Uses Amazon Nova Lite (amazon.nova-lite-v1:0) via Bedrock for text.
+Uses Amazon Nova 2 Sonic (amazon.nova-sonic-v2:0) via Bedrock for voice.
 """
 
 import json
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Tuple
 
 from utils import get_logger, check_internet
 
 _log = None
 _bedrock_client = None
+_bedrock_runtime_streaming = None
 _s3_client = None
 _lambda_client = None
 _chat_history: List[Dict] = []
+
+# Nova 2 Sonic Model ID
+NOVA_SONIC_MODEL_ID = "amazon.nova-sonic-v2:0"
 
 
 def _logger():
@@ -30,6 +35,16 @@ def _get_bedrock():
         from config import AWS_REGION
         _bedrock_client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
     return _bedrock_client
+
+
+def _get_bedrock_streaming():
+    """Get or create Bedrock runtime streaming client for Nova 2 Sonic."""
+    global _bedrock_runtime_streaming
+    if _bedrock_runtime_streaming is None:
+        import boto3
+        from config import AWS_REGION
+        _bedrock_runtime_streaming = boto3.client("bedrock-runtime", region_name=AWS_REGION)
+    return _bedrock_runtime_streaming
 
 
 def _get_s3():
@@ -200,10 +215,32 @@ def extract_aadhaar_llm(text: str) -> str:
 
 
 def analyze_health_summary(symptoms: str, prescriptions: str, vitals: dict, env_data: dict,
-                           triage: str = "", history: str = "") -> str:
-    """Generate consolidated health summary via Bedrock, including triage and historical data."""
+                           triage: str = "", history: str = "", fitu_data: dict = None) -> str:
+    """Generate consolidated health summary via Bedrock, including triage, historical data, and Fit-U mobility data."""
     from config import HEALTH_SUMMARY_PROMPT
-    prompt = HEALTH_SUMMARY_PROMPT.format(
+
+    # Build Fit-U mobility section if data available
+    fitu_section = ""
+    if fitu_data:
+        fitu_section = f"""
+MOBILITY DATA (from Fit-U companion app):
+- Steps today: {fitu_data.get('steps', 'N/A')}
+- Distance walked: {fitu_data.get('distance_km', 'N/A')} km
+- Current activity: {fitu_data.get('activity', 'N/A')}
+- Estimated speed: {fitu_data.get('speed_kmh', 'N/A')} km/h
+- Location: {fitu_data.get('latitude', 'N/A')}, {fitu_data.get('longitude', 'N/A')}
+"""
+
+    # Update prompt to include Fit-U data
+    prompt_template = HEALTH_SUMMARY_PROMPT
+    if fitu_section:
+        # Insert Fit-U section before the historical records
+        prompt_template = prompt_template.replace(
+            "Historical records (previous visits):",
+            fitu_section + "\nHistorical records (previous visits):"
+        )
+
+    prompt = prompt_template.format(
         symptoms=symptoms or "None reported",
         prescriptions=prescriptions or "None captured",
         spo2=vitals.get("spo2", "N/A"),
@@ -214,6 +251,60 @@ def analyze_health_summary(symptoms: str, prescriptions: str, vitals: dict, env_
         history=history or "No previous visits found.",
     )
     return invoke_llm(prompt)
+
+
+def invoke_nova_sonic_voice(text_prompt: str, language_code: str = "en-IN") -> Optional[bytes]:
+    """
+    Invoke Amazon Nova 2 Sonic for real-time voice response.
+    Returns raw PCM audio bytes to be played through the speaker.
+    Falls back to None if Nova Sonic is unavailable (caller should use Polly).
+
+    Args:
+        text_prompt: The text to convert to speech
+        language_code: Language code (default: en-IN)
+
+    Returns:
+        PCM audio bytes or None on failure
+    """
+    try:
+        client = _get_bedrock_streaming()
+
+        request_body = {
+            "inputText": text_prompt,
+            "voiceConfig": {
+                "voiceId": "Kamal",
+                "languageCode": language_code
+            },
+            "audioConfig": {
+                "audioType": "SPEECH",
+                "encoding": "pcm",
+                "sampleRateHertz": 16000
+            }
+        }
+
+        response = client.invoke_model_with_response_stream(
+            modelId=NOVA_SONIC_MODEL_ID,
+            body=json.dumps(request_body),
+            contentType="application/json"
+        )
+
+        audio_chunks = []
+        for event in response.get("body", []):
+            chunk = event.get("chunk")
+            if chunk:
+                audio_chunks.append(chunk.get("bytes", b""))
+
+        if audio_chunks:
+            audio_bytes = b"".join(audio_chunks)
+            _logger().info("[AWS] Nova2Sonic: Generated %d bytes of audio", len(audio_bytes))
+            return audio_bytes
+        else:
+            _logger().warning("[AWS] Nova2Sonic: No audio data received")
+            return None
+
+    except Exception as e:
+        _logger().warning("[AWS] Nova2Sonic fallback: %s", e)
+        return None
 
 
 # ============================================================

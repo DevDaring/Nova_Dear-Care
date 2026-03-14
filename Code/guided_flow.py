@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-guided_flow.py - Sequential guided encounter flow for Pocket ASHA.
+guided_flow.py - Sequential guided encounter flow for Dear-Care.
 
 Flow: Language → Wake Word → Aadhaar → Patient Lookup → Health Inquiry →
       Prescription Capture Loop → Pulse Sensor → Environment Sensor →
@@ -41,6 +41,7 @@ class GuidedFlow:
         self.env_data = {}
         self._running = True
         self._prescriptions_done = False
+        self.fitu_data = {}  # Fit-U companion app data
 
     # ------------------------------------------------------------------
     # I/O helpers
@@ -48,7 +49,7 @@ class GuidedFlow:
 
     def _speak(self, text: str):
         try:
-            print(f"\n  Asha: {text}")
+            print(f"\n  Kamal: {text}")
         except BrokenPipeError:
             pass
         if self.use_voice:
@@ -165,6 +166,9 @@ class GuidedFlow:
             self._environment_reading()
             self.enc.advance_from_vitals()
 
+            # Fetch Fit-U companion app data before final analysis
+            self._fetch_fitu_data()
+
             self._final_analysis()
             self._save_and_wrap()
 
@@ -202,7 +206,7 @@ class GuidedFlow:
     # --- Stage 2: Wake Word ---
 
     def _wait_for_wake(self):
-        self._speak("Say Hello Asha when you are ready to begin the checkup.")
+        self._speak("Say Hello Kamal when you are ready to begin the checkup.")
         max_attempts = 30  # ~2.5 min of waiting
         for _ in range(max_attempts):
             if not self._running:
@@ -216,8 +220,8 @@ class GuidedFlow:
                 except Exception:
                     pass
             else:
-                resp = self._listen("Type 'hello asha' to begin: ", duration=5)
-                if resp and "asha" in resp.lower():
+                resp = self._listen("Type 'hello kamal' to begin: ", duration=5)
+                if resp and ("kamal" in resp.lower() or "dear care" in resp.lower() or "dear-care" in resp.lower()):
                     self._speak("Let's begin the patient checkup.")
                     return
         self._speak("Starting the checkup now.")
@@ -668,6 +672,21 @@ class GuidedFlow:
 
     # --- Stage 9: Final AI Analysis ---
 
+    def _fetch_fitu_data(self):
+        """Fetch Fit-U companion app health data before analysis."""
+        try:
+            # Get worker ID - you may want to store this earlier in the flow
+            # For now, use a default or get from encounter data
+            worker_id = self.enc.data.get("asha_worker_id", "ASHA_WK_001")
+            self.fitu_data = self.enc.fetch_fitu_data(worker_id)
+            if self.fitu_data:
+                _logger().info("[GF] Fit-U data loaded for analysis")
+            else:
+                _logger().info("[GF] No Fit-U data available - proceeding without mobility context")
+        except Exception as e:
+            _logger().warning("[GF] Fit-U data fetch failed: %s", e)
+            self.fitu_data = {}
+
     def _final_analysis(self):
         # Run on-device triage (always runs, even offline)
         triage_summary = ""
@@ -702,7 +721,7 @@ class GuidedFlow:
         except Exception as e:
             _logger().warning("[GF] Historical lookup error: %s", e)
 
-        # Bedrock consolidated analysis (includes triage + history)
+        # Bedrock consolidated analysis (includes triage + history + Fit-U data)
         if check_internet():
             try:
                 from aws_handler import analyze_health_summary
@@ -713,12 +732,15 @@ class GuidedFlow:
                     env_data=self.env_data,
                     triage=triage_summary,
                     history=history_text,
+                    fitu_data=self.fitu_data,
                 )
                 if summary:
                     self._speak("Health summary: " + summary)
                     self.enc.data["notes"] = (
                         self.enc.data.get("notes", "") + " AI Summary: " + summary[:300]
                     ).strip()
+                    # Store AI summary for Fit-U notification
+                    self.enc.data["ai_summary"] = summary[:500]
                     _logger().info("[GF] Bedrock health summary generated")
                     return
             except Exception as e:

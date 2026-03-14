@@ -59,3 +59,21 @@ diagnostic_report.json
 Code/audio/
 Code/temp/
 Code/data/
+Code/env/
+
+# Submissions and documentation
+Submission/
+Revision/
+Sensors_Setup.docx
+Prototype.pptx
+
+# Screenshots and images
+*.PNG
+*.jpg
+*.jpeg
+*.png
+Last_Page.PNG
+Snapshot_*.jpg
+
+# Test/scratch scripts
+create_aws_diagram.py

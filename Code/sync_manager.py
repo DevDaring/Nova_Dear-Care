@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-sync_manager.py - Background data synchronization for Pocket ASHA.
+sync_manager.py - Background data synchronization for Dear-Care.
 Checks connectivity periodically and uploads pending encounters to S3.
+Notifies Fit-U companion app after successful verdict sync.
 """
 
 import threading
@@ -31,6 +32,18 @@ class SyncManager:
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
+        self.fitu_client = None
+
+    def _get_fitu_client(self):
+        """Lazy initialization of Fit-U client."""
+        if self.fitu_client is None:
+            try:
+                from fitu_client import FituClient
+                from config import Config
+                self.fitu_client = FituClient(Config())
+            except Exception as e:
+                _logger().warning("[SYNC] Fit-U client init failed: %s", e)
+        return self.fitu_client
 
     def start(self):
         """Start the background sync thread."""
@@ -95,6 +108,22 @@ class SyncManager:
                         _logger().info("[SYNC] Lambda triggered for %s", eid)
                     except Exception as le:
                         _logger().warning("[SYNC] Lambda trigger failed for %s: %s", eid, le)
+
+                    # Notify Fit-U app about verdict
+                    try:
+                        fitu = self._get_fitu_client()
+                        if fitu:
+                            worker_id = enc.get("asha_worker_id", enc.get("worker_id", ""))
+                            triage = enc.get("triage_level", "ROUTINE")
+                            summary = enc.get("notes", enc.get("ai_summary", "Health assessment complete."))
+                            fitu.notify_fitu_verdict_ready(
+                                worker_id=worker_id,
+                                encounter_id=eid,
+                                triage_level=triage,
+                                summary=summary[:500]  # Truncate for SNS limits
+                            )
+                    except Exception as fe:
+                        _logger().warning("[SYNC] Fit-U notification failed for %s: %s", eid, fe)
                 else:
                     _logger().warning("[SYNC] Partial sync for %s", eid)
             except Exception as e:

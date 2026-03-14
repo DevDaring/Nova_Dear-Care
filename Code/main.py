@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-main.py - Entry point for Pocket ASHA Healthcare Assistant.
+main.py - Entry point for Dear-Care Healthcare Assistant.
 
 Target Platform: RDK S100 (Ubuntu 22.04, ARM64)
+Hackathon: Amazon Nova Devpost | Voice AI Track
 
 HOW TO RUN:
 ============================================================
-Run Pocket ASHA:
-    cd ~/Documents/AI_4_Bharat/Code
+Run Dear-Care:
+    cd ~/Documents/dear-care/Code
     env -u LD_LIBRARY_PATH -u LD_PRELOAD python3 main.py
 
 Text-only mode (no mic/speaker):
@@ -31,7 +32,7 @@ _running = True
 
 def _signal_handler(sig, frame):
     global _running
-    print("\n[ASHA] Shutting down...")
+    print("\n[KAMAL] Shutting down...")
     _running = False
 
 
@@ -40,11 +41,11 @@ signal.signal(signal.SIGTERM, _signal_handler)
 
 
 # ============================================================
-# POCKET ASHA
+# DEAR-CARE
 # ============================================================
 
-class PocketAsha:
-    """Main Pocket ASHA healthcare assistant."""
+class DearCare:
+    """Main Dear-Care healthcare assistant."""
 
     def __init__(self, use_voice: bool = True):
         from utils import setup_logging, free_memory, get_logger
@@ -53,10 +54,14 @@ class PocketAsha:
         self.use_voice = use_voice
 
         print("=" * 60)
-        print("  POCKET ASHA - Healthcare Assistant")
+        print("   DEAR-CARE — AI Health Assistant")
+        print("   Voice AI powered by Nova 2 Sonic")
+        print("   Amazon Nova Hackathon | DevDaring")
         print("=" * 60)
-        print(f"  Voice mode: {'Enabled' if use_voice else 'Text-only'}")
-        print(f"  Wake word:  'Hello Asha' / 'Ok Asha'")
+        print(f"  Persona  : Kamal")
+        print(f"  Platform : RDK S100 (ARM64)")
+        print(f"  Voice    : Amazon Nova 2 Sonic (Primary)")
+        print(f"  Mode     : {'Voice Enabled' if use_voice else 'Text-only'}")
         print("=" * 60)
 
         # State
@@ -81,7 +86,7 @@ class PocketAsha:
         free_memory()
         from utils import cleanup_temp
         cleanup_temp()
-        print("[INIT] Pocket ASHA ready")
+        print("[INIT] Dear-Care ready")
         print("-" * 60)
 
     # ------------------------------------------------------------------
@@ -139,7 +144,7 @@ class PocketAsha:
 
     def speak(self, text: str):
         """Output text via speaker and console."""
-        print(f"\n  Asha: {text}")
+        print(f"\n  Kamal: {text}")
         if self.use_voice:
             try:
                 from voice_handler import speak
@@ -534,7 +539,7 @@ class PocketAsha:
 
     def _shutdown(self):
         """Clean shutdown."""
-        print("\n[ASHA] Shutting down...")
+        print("\n[KAMAL] Shutting down...")
         self.sync.stop()
         if self.encounter.active:
             self.encounter.end()
@@ -542,7 +547,7 @@ class PocketAsha:
         free_memory()
         from aws_handler import clear_chat
         clear_chat()
-        print("[ASHA] Goodbye!")
+        print("[KAMAL] Goodbye!")
 
     def _ask_language(self):
         """Ask user to select language at startup."""
@@ -594,7 +599,7 @@ class PocketAsha:
 # ============================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="Pocket ASHA Healthcare Assistant")
+    parser = argparse.ArgumentParser(description="Dear-Care Healthcare Assistant")
     parser.add_argument("--text", action="store_true", help="Text-only mode (no microphone/speaker)")
     parser.add_argument("--guided", action="store_true", help="Run guided encounter flow")
     args = parser.parse_args()
@@ -607,7 +612,8 @@ def main():
         use_voice = not args.text
 
         print("=" * 60)
-        print("  POCKET ASHA - Guided Encounter Flow")
+        print("   DEAR-CARE — Guided Encounter Flow")
+        print("   Amazon Nova Hackathon | DevDaring")
         print("=" * 60)
 
         import voice_handler
@@ -662,9 +668,9 @@ def main():
             pass
         finally:
             sync.stop()
-            print("[ASHA] Goodbye!")
+            print("[KAMAL] Goodbye!")
     else:
-        app = PocketAsha(use_voice=not args.text)
+        app = DearCare(use_voice=not args.text)
         app.run()
 
 

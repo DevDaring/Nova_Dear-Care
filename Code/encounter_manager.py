@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-encounter_manager.py - Patient encounter workflow state machine for Pocket ASHA.
+encounter_manager.py - Patient encounter workflow state machine for Dear-Care.
 Manages the complete encounter flow: demographics → photo → vitals → audio →
 triage → recommendations → OCR → store → sync → education.
+Integrates with Fit-U companion app for mobility data.
 """
 
 import os
@@ -62,6 +63,20 @@ class EncounterManager:
         self.patient_id: Optional[str] = None
         self.data: Dict = {}
         self.folder: Optional[Path] = None
+        self.fitu_client = None
+        self.fitu_data = {}
+
+    def init_fitu_client(self):
+        """Initialize Fit-U client (lazy initialization)."""
+        if self.fitu_client is None:
+            try:
+                from fitu_client import FituClient
+                from config import Config
+                self.fitu_client = FituClient(Config())
+                _logger().info("[ENC] Fit-U client initialized")
+            except Exception as e:
+                _logger().warning("[ENC] Fit-U client init failed: %s", e)
+        return self.fitu_client
 
     @property
     def active(self) -> bool:
@@ -277,6 +292,40 @@ class EncounterManager:
 
     def advance_from_triage(self):
         self._transition(EncounterState.OCR)
+
+    # ------------------------------------------------------------------
+    # Fit-U Integration
+    # ------------------------------------------------------------------
+
+    def fetch_fitu_data(self, worker_id: str) -> Dict:
+        """
+        Fetch latest Fit-U health data for the worker.
+        Should be called before final AI analysis.
+
+        Args:
+            worker_id: The ASHA worker ID
+
+        Returns:
+            Dict with Fit-U health data or empty dict if unavailable
+        """
+        if not worker_id:
+            _logger().warning("[ENC] No worker_id provided for Fit-U fetch")
+            return {}
+
+        try:
+            client = self.init_fitu_client()
+            if client:
+                self.fitu_data = client.fetch_latest_fitu_data(worker_id)
+                if self.fitu_data:
+                    _logger().info(
+                        "[ENC] Fit-U data fetched: steps=%s, activity=%s",
+                        self.fitu_data.get("steps", 0),
+                        self.fitu_data.get("activity", "unknown")
+                    )
+                return self.fitu_data
+        except Exception as e:
+            _logger().warning("[ENC] Fit-U data fetch failed: %s", e)
+        return {}
 
     # ------------------------------------------------------------------
     # OCR

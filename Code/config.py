@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-config.py - Configuration and Constants for Pocket ASHA System
+config.py - Configuration and Constants for Dear-Care System
 
 Target Platform: RDK S100 (Ubuntu 22.04, ARM64, 4GB RAM)
+Hackathon: Amazon Nova Devpost | Voice AI Track
 """
 
 import os
@@ -23,8 +24,16 @@ AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 AWS_ACCOUNT_ID = os.getenv("AWS_ACCOUNT_ID", "")
 AWS_BEARER_TOKEN = os.getenv("AWS_BEARER_TOKEN_BEDROCK", "")
-S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "pocket-asha-data")
-LAMBDA_FUNCTION_NAME = os.getenv("LAMBDA_FUNCTION_NAME", "pocket-asha-clinical-notes")
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "dear-care-data")
+LAMBDA_FUNCTION_NAME = os.getenv("LAMBDA_FUNCTION_NAME", "dear-care-clinical-notes")
+
+# ============================================================
+# FIT-U COMPANION APP INTEGRATION
+# ============================================================
+FITU_API_GATEWAY_URL = os.getenv("FITU_API_GATEWAY_URL", "")
+FITU_SNS_TOPIC_ARN = os.getenv("FITU_SNS_TOPIC_ARN", "")
+FITU_DATA_S3_PREFIX = os.getenv("FITU_DATA_S3_PREFIX", "fitu-companion/")
+FITU_DYNAMODB_TABLE = os.getenv("FITU_DYNAMODB_TABLE", "dear-care-fitu-health")
 
 # ============================================================
 # PATHS
@@ -62,10 +71,16 @@ TEMP_AUDIO_OUTPUT = TEMP_DIR / "voice_output.wav"
 # ============================================================
 # WAKE WORD CONFIGURATION
 # ============================================================
-WAKE_WORDS = ["asha"]
-WAKE_WORD_VARIATIONS = ["asha", "aasha", "asho", "aisha", "aha", "ahsa", "arsha", "ashah"]
-ASSISTANT_NAME = "Asha"
-WAKE_PHRASES = ["hello asha", "ok asha", "okay asha", "hey asha", "hi asha"]
+WAKE_WORDS = ["kamal", "dear care", "dear-care"]
+WAKE_WORD_VARIATIONS = [
+    "kamal", "kamaal", "kamal", "kaml",
+    "dear care", "dear-care", "dearcare",
+]
+ASSISTANT_NAME = "Kamal"
+WAKE_PHRASES = [
+    "hello kamal", "ok kamal", "okay kamal", "hey kamal", "hi kamal",
+    "dear care", "dear-care",
+]
 
 # ============================================================
 # CAMERA CONFIGURATION (SC230AI via get_vin_data — RDK S100 MIPI)
@@ -127,7 +142,7 @@ TRANSCRIBE_SAMPLE_RATE = 16000
 # ============================================================
 # SECURITY
 # ============================================================
-ASHA_PIN_HASH = os.getenv("ASHA_PIN_HASH", "")
+DEARCARE_PIN_HASH = os.getenv("DEARCARE_PIN_HASH", os.getenv("ASHA_PIN_HASH", ""))
 DATA_RETENTION_DAYS = 30
 MAX_OFFLINE_ENCOUNTERS = 100
 
@@ -203,9 +218,9 @@ HELP_KEYWORDS = ["help", "assist", "what can you do", "how do i", "guide"]
 # CONVERSATION PROMPTS
 # ============================================================
 GREETING_MESSAGE = (
-    "Namaste! I am Asha, your healthcare assistant. "
+    "Namaste! I am Kamal, your healthcare assistant. "
     "I can help you with patient checkups, prescriptions, and health assessments. "
-    "Say Hello Asha followed by your command."
+    "Say Hello Kamal followed by your command."
 )
 
 FAREWELL_MESSAGE = (
@@ -213,7 +228,7 @@ FAREWELL_MESSAGE = (
     "Stay healthy and goodbye!"
 )
 
-WAKE_WORD_HINT = "Say Hello Asha or Ok Asha to talk to me."
+WAKE_WORD_HINT = "Say Hello Kamal or Ok Kamal to talk to me."
 
 CONFIRM_CAPTURE = "Ready to capture. Say yes to proceed or no to cancel."
 
@@ -225,7 +240,7 @@ ENCOUNTER_START = (
 # ============================================================
 # BEDROCK SYSTEM PROMPT
 # ============================================================
-SYSTEM_PROMPT = """You are Asha, an AI healthcare assistant for rural Indian ASHA workers.
+SYSTEM_PROMPT = """You are Kamal, an AI healthcare assistant for rural Indian ASHA workers.
 You help with patient triage, prescription reading, and health education.
 
 RULES:
