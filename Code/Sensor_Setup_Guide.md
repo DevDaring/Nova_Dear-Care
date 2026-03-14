@@ -693,8 +693,8 @@ aws bedrock-runtime invoke-model \
     --body '{"messages":[{"role":"user","content":[{"text":"hello"}]}]}' \
     /tmp/bedrock_test.json
 
-# Check S3 bucket
-aws s3 ls s3://pocket-asha-data-343104031497/
+# Check S3 bucket (replace with your bucket name)
+aws s3 ls s3://dear-care-data-your_account_id/
 
 # Check Polly voices
 aws polly describe-voices --language-code en-IN --query 'Voices[*].Name'

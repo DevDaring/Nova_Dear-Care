@@ -5,8 +5,8 @@ set -e
 
 FUNCTION_NAME="pocket-asha-clinical-notes"
 REGION="us-east-1"
-ACCOUNT_ID="343104031497"
-S3_BUCKET="pocket-asha-data-${ACCOUNT_ID}"
+ACCOUNT_ID="${AWS_ACCOUNT_ID:-your_account_id}"
+S3_BUCKET="${S3_BUCKET_NAME:-pocket-asha-data}-${ACCOUNT_ID}"
 ROLE_NAME="pocket-asha-lambda-role"
 ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${ROLE_NAME}"
 RUNTIME="python3.10"

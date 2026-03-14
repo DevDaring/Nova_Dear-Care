@@ -307,7 +307,7 @@ Fill in:
 - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
 - `AWS_REGION` (default: `us-east-1`)
 - `AWS_ACCOUNT_ID`
-- `S3_BUCKET_NAME` (e.g., `pocket-asha-data-343104031497`)
+- `S3_BUCKET_NAME` (e.g., `dear-care-data-your_account_id`)
 
 ### Step 3: Deploy Lambda (Optional)
 

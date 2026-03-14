@@ -14,7 +14,7 @@ import os
 import boto3
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
-BUCKET = os.environ.get("S3_BUCKET_NAME", "pocket-asha-data-343104031497")
+BUCKET = os.environ.get("S3_BUCKET_NAME", "dear-care-data")
 MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
 
 s3 = boto3.client("s3", region_name=REGION)
