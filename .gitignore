@@ -2,6 +2,8 @@
 .env
 .env.local
 .env.*.local
+Code/env
+env
 
 # Python
 __pycache__/
@@ -18,7 +20,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/
@@ -77,3 +79,5 @@ Snapshot_*.jpg
 
 # Test/scratch scripts
 create_aws_diagram.py
+wifi_guide.md
+.kiro/
