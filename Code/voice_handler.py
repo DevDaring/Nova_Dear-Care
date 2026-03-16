@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """
-voice_handler.py - Audio recording, TTS (Nova 2 Sonic/Polly/pyttsx3), STT (Transcribe/SpeechRecognition)
+voice_handler.py - Audio recording, TTS (Polly/pyttsx3), STT (Transcribe/SpeechRecognition)
 for Dear-Care on RDK S100.
 
 TTS Priority:
-1. Amazon Nova 2 Sonic (primary voice AI)
-2. Amazon Polly (secondary)
-3. pyttsx3 (offline fallback)
+1. Amazon Polly Neural (primary)
+2. pyttsx3 (offline fallback)
 
 Audio flow:
  INPUT:  Jabra USB Microphone (hw:1,0) via arecord
@@ -185,42 +184,17 @@ def play_audio(audio_path: str) -> bool:
 
 
 # ============================================================
-# TTS — Nova 2 Sonic (primary) → Polly (secondary) → pyttsx3 (offline)
+# TTS — Polly (primary) → pyttsx3 (offline fallback)
 # ============================================================
 
 def text_to_speech(text: str, output_path: str) -> bool:
-    """Convert text to WAV. Tries Nova 2 Sonic first, then Polly, then pyttsx3 offline."""
-    # Try Nova 2 Sonic first (primary - Voice AI)
-    if _try_nova_sonic_tts(text, output_path):
-        return True
-    # Fallback to Polly
-    _logger().info("[TTS] FALLBACK-1: Polly — NovaSonic unavailable")
+    """Convert text to WAV. Tries Polly first, then pyttsx3 offline."""
+    # Try Polly first (primary)
     if _try_polly_tts(text, output_path):
         return True
-    # Final fallback to pyttsx3
-    _logger().info("[TTS] FALLBACK-2: pyttsx3 — Polly unavailable")
+    # Fallback to pyttsx3
+    _logger().info("[TTS] FALLBACK: pyttsx3 — Polly unavailable")
     return _try_pyttsx3(text, output_path)
-
-
-def _try_nova_sonic_tts(text: str, output_path: str) -> bool:
-    """Try Amazon Nova 2 Sonic for TTS (primary voice AI)."""
-    try:
-        from aws_handler import invoke_nova_sonic_voice
-        from language_handler import get_transcribe_lang_code
-
-        # Get language code for Nova Sonic
-        lang_code = get_transcribe_lang_code() or "en-IN"
-
-        pcm_audio = invoke_nova_sonic_voice(text, language_code=lang_code)
-        if pcm_audio:
-            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-            _pcm_to_wav(pcm_audio, output_path, rate=24000)  # Nova Sonic outputs 24kHz
-            _logger().info("[TTS] PRIMARY: NovaSonic generated: %s", output_path)
-            return True
-        return False
-    except Exception as e:
-        _logger().warning("[TTS] NovaSonic error: %s", e)
-        return False
 
 
 def _try_polly_tts(text: str, output_path: str) -> bool:

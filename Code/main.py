@@ -56,12 +56,14 @@ class DearCare:
 
         print("=" * 60)
         print("   DEAR-CARE — AI Health Assistant")
-        print("   Voice AI powered by Nova 2 Sonic")
+        print("   Powered by Amazon Nova Lite")
         print("   Amazon Nova Hackathon | DevDaring")
         print("=" * 60)
         print(f"  Persona  : Kamal")
         print(f"  Platform : RDK S100 (ARM64)")
-        print(f"  Voice    : Amazon Nova 2 Sonic (Primary)")
+        print(f"  LLM      : Amazon Nova Lite (Reasoning)")
+        print(f"  TTS      : Amazon Polly Neural")
+        print(f"  STT      : Amazon Transcribe Streaming")
         print(f"  Mode     : {'Voice Enabled' if use_voice else 'Text-only'}")
         print("=" * 60)
 
@@ -665,12 +667,12 @@ class DearCare:
         return sm.find_by_aadhaar(aadhaar)
 
     # ------------------------------------------------------------------
-    # Nova Sonic Consultation (Speech-to-Speech)
+    # Health Consultation (Transcribe STT → Nova Lite → Polly TTS)
     # ------------------------------------------------------------------
 
-    def _nova_sonic_consultation(self):
-        """Run an interactive speech-to-speech consultation using Nova 2 Sonic.
-        Records user's voice, streams it to Nova Sonic, plays back the AI response."""
+    def _health_consultation(self):
+        """Run an interactive health consultation.
+        Records user's voice via Transcribe STT, reasons via Nova Lite, speaks via Polly TTS."""
         self.speak("Starting health consultation. Please speak your health concern after the beep. "
                    "Say stop or goodbye when you are done.")
 
@@ -691,7 +693,7 @@ class DearCare:
 
         for turn in range(10):  # max 10 turns of conversation
             self._beep()
-            # Record user's speech
+            # Record user's speech via Transcribe STT
             resp = self.listen_response(duration=15)
             if not resp:
                 self.speak("I didn't hear anything. Would you like to continue the consultation?")
@@ -707,50 +709,22 @@ class DearCare:
 
             consultation_notes.append(f"Patient: {resp}")
 
-            # Use Nova Sonic for speech-to-speech response
+            # Reason via Nova Lite, speak via Polly TTS
             prompt = (f"Patient context: {patient_context}\n"
                       f"Patient says: {resp}\n"
                       f"Respond as Kamal, a caring healthcare assistant. "
                       f"Give brief, helpful medical guidance in 2-3 sentences.")
             try:
-                from aws_handler import invoke_nova_sonic_voice
-                from language_handler import get_transcribe_lang_code
-                lang_code = get_transcribe_lang_code() or "en-IN"
-                pcm_audio = invoke_nova_sonic_voice(prompt, language_code=lang_code)
-                if pcm_audio:
-                    from voice_handler import play_audio
-                    import struct, wave
-                    from config import TEMP_DIR
-                    wav_path = str(TEMP_DIR / "consultation_response.wav")
-                    # Write PCM to WAV at 24kHz
-                    with wave.open(wav_path, "w") as wf:
-                        wf.setnchannels(1)
-                        wf.setsampwidth(2)
-                        wf.setframerate(24000)
-                        wf.writeframes(pcm_audio)
-                    play_audio(wav_path)
-                    # Also get text version for notes
-                    consultation_notes.append(f"Kamal: [voice response]")
+                from aws_handler import chat
+                text_resp = chat(prompt)
+                if text_resp:
+                    self.speak(text_resp)
+                    consultation_notes.append(f"Kamal: {text_resp}")
                 else:
-                    # Fallback to text chat + TTS
-                    from aws_handler import chat
-                    text_resp = chat(prompt)
-                    if text_resp:
-                        self.speak(text_resp)
-                        consultation_notes.append(f"Kamal: {text_resp}")
-                    else:
-                        self.speak("I'm having trouble connecting. Please try again.")
+                    self.speak("I'm having trouble connecting. Please try again.")
             except Exception as e:
                 self.log.error("[CONSULT] %s", e)
-                # Fallback to chat + TTS
-                try:
-                    from aws_handler import chat
-                    text_resp = chat(prompt)
-                    if text_resp:
-                        self.speak(text_resp)
-                        consultation_notes.append(f"Kamal: {text_resp}")
-                except Exception:
-                    self.speak("Error during consultation.")
+                self.speak("Error during consultation.")
 
         self._beep()
         self.speak("Consultation ended.")
@@ -874,7 +848,7 @@ class DearCare:
                 resp = self.listen_response(duration=5)
                 if resp and any(w in resp.lower() for w in
                                ["yes", "yeah", "haan", "ha", "ji", "ok", "consultation", "consult"]):
-                    self._nova_sonic_consultation()
+                    self._health_consultation()
                     # Re-save encounter with consultation notes
                     if self.encounter.active:
                         from storage_manager import StorageManager
@@ -970,6 +944,24 @@ class DearCare:
 
                     except Exception as e:
                         self.log.warning("[MAIN] Lambda invocation error: %s", e)
+
+                    # Notify Fit-U mobile app with Lambda results
+                    if lambda_output:
+                        try:
+                            from fitu_client import FituClient
+                            fitu = FituClient()
+                            if fitu.is_available():
+                                worker_id = summary.get("worker_id", "")
+                                fitu.notify_fitu_verdict_ready(
+                                    worker_id=worker_id,
+                                    encounter_id=eid,
+                                    triage_level=summary.get("triage_level", "ROUTINE"),
+                                    summary=lambda_output
+                                )
+                                self.log.info("[MAIN] Lambda result sent to mobile app")
+                        except Exception as e:
+                            self.log.warning("[MAIN] Fit-U notification error: %s", e)
+
                 else:
                     self.speak("Upload pending. Data saved locally.")
             except Exception as e:

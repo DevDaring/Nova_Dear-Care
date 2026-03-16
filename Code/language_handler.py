@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
 language_handler.py - Multilingual support for Dear-Care on RDK S100.
-Maps Nova 2 Sonic supported languages to AWS Polly voices and Transcribe codes.
+Maps supported languages to AWS Polly voices and Transcribe language codes.
 """
 
 from typing import Optional, Dict
 
-# Supported languages — aligned with Amazon Nova 2 Sonic capabilities.
-# Polly voices serve as TTS fallback when Nova Sonic is unavailable.
+# Supported languages with Polly Neural voice IDs and Transcribe codes.
 LANGUAGES: Dict[str, Dict] = {
     "en": {
         "name": "English",
