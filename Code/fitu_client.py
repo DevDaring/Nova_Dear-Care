@@ -167,6 +167,9 @@ class FituClient:
                 logger.warning("[FITU] SNS not available")
                 return False
 
+            triage_level = triage_level or "ROUTINE"
+            worker_id = worker_id or "unknown"
+
             payload = {
                 "notification_type": "DEAR_CARE_VERDICT",
                 "worker_id": worker_id,
