@@ -44,7 +44,9 @@ class AwsSyncService {
 
   /// Check if API URL is configured (not placeholder)
   bool get isConfigured =>
-      _apiGatewayUrl.isNotEmpty && !_apiGatewayUrl.contains('YOUR_API_GATEWAY_URL');
+      _apiGatewayUrl.isNotEmpty &&
+      !_apiGatewayUrl.contains('YOUR_API') &&
+      !_apiGatewayUrl.contains('YOUR_WORKER');
 
   /// Sync health snapshot to AWS
   Future<bool> syncSnapshot(HealthSnapshot snapshot) async {

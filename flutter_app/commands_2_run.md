@@ -13,6 +13,9 @@ Pick one from the list, then:
 cd C:\Users\Debz\AppData\Local\Android\Sdk\emulator
 .\emulator.exe -avd Pixel_9_Pro_XL -no-snapshot-load
 
+
+
+############# Use for application run
 cd D:\Contest\Nova_Dear-Care\flutter_app
 
 # 1. Kill ALL Kotlin daemon processes holding file locks

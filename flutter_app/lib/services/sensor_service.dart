@@ -43,21 +43,25 @@ class SensorService {
     _workerId = workerId;
     debugPrint('[SensorService] Initializing for worker: $workerId');
 
-    // Initialize pedometer
+    // Initialize pedometer (not available on emulators)
     try {
       _stepSubscription = Pedometer.stepCountStream.listen(
         _onStepCount,
         onError: _onSensorError,
         cancelOnError: false,
       );
+    } catch (e) {
+      debugPrint('[SensorService] StepCount unavailable: $e');
+    }
 
+    try {
       _statusSubscription = Pedometer.pedestrianStatusStream.listen(
         _onPedestrianStatus,
         onError: _onSensorError,
         cancelOnError: false,
       );
     } catch (e) {
-      debugPrint('[SensorService] Pedometer error: $e');
+      debugPrint('[SensorService] PedestrianStatus unavailable: $e');
     }
 
     // Initialize GPS

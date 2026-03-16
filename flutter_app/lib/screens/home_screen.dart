@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../env_config.dart';
 import '../providers/health_provider.dart';
 import '../providers/verdict_provider.dart';
 import '../widgets/health_card.dart';
@@ -30,7 +31,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _autoInitialize() async {
     final prefs = await SharedPreferences.getInstance();
-    final workerId = prefs.getString('worker_id') ?? '';
+    var workerId = prefs.getString('worker_id') ?? '';
+
+    // Auto-populate from EnvConfig on first launch
+    if (workerId.isEmpty && EnvConfig.workerId != 'YOUR_WORKER_ID') {
+      workerId = EnvConfig.workerId;
+      await prefs.setString('worker_id', workerId);
+      await prefs.setString('api_gateway_url', EnvConfig.apiGatewayUrl);
+    }
+
     setState(() => _workerId = workerId);
 
     if (workerId.isNotEmpty && mounted) {
