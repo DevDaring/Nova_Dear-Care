@@ -18,18 +18,29 @@ class VerdictProvider extends ChangeNotifier {
   bool _firstPoll = true;
   String _deviceUrl = EnvConfig.deviceUrl;
 
+  bool _deviceReachable = true;
+  int _failCount = 0;
+
   List<DearCareVerdict> get verdicts => _verdicts;
   DearCareVerdict? get latestVerdict => _latestVerdict;
   int get unreadCount => _verdicts.where((v) => !v.isRead).length;
 
-  /// Load verdicts for a worker (one-time from API Gateway)
+  /// Load verdicts for a worker from AWS API Gateway (DynamoDB)
   Future<void> loadVerdicts(String workerId) async {
-    final verdict = await _awsService.fetchLatestVerdict(workerId);
-    if (verdict != null) {
-      _verdicts.insert(0, verdict);
-      _latestVerdict = verdict;
-      _seenIds.add(verdict.encounterId);
+    debugPrint('[Verdict] Loading past verdicts from AWS for $workerId...');
+    final results = await _awsService.fetchAllVerdicts(workerId);
+    if (results.isNotEmpty) {
+      for (final verdict in results) {
+        if (!_seenIds.contains(verdict.encounterId)) {
+          _seenIds.add(verdict.encounterId);
+          _verdicts.add(verdict);
+        }
+      }
+      _latestVerdict = _verdicts.isNotEmpty ? _verdicts.first : null;
+      debugPrint('[Verdict] Loaded ${results.length} verdicts from AWS');
       notifyListeners();
+    } else {
+      debugPrint('[Verdict] No verdicts found in AWS');
     }
   }
 
@@ -55,8 +66,21 @@ class VerdictProvider extends ChangeNotifier {
 
   /// Poll the device HTTP server for new verdicts
   Future<void> _pollForVerdicts(String workerId) async {
+    // After 3 consecutive failures, slow down polling to avoid log spam
+    if (!_deviceReachable) return;
+
     final results = await _awsService.fetchVerdictsFromDevice(_deviceUrl, workerId);
-    if (results.isEmpty) return;
+    if (results.isEmpty) {
+      _failCount++;
+      if (_failCount >= 3) {
+        _deviceReachable = false;
+        debugPrint('[Verdict] Device unreachable after $_failCount attempts, pausing polls. Use Sync Now to retry.');
+      }
+      return;
+    }
+
+    _failCount = 0;
+    _deviceReachable = true;
 
     for (final verdict in results) {
       if (_seenIds.contains(verdict.encounterId)) continue;
@@ -73,6 +97,10 @@ class VerdictProvider extends ChangeNotifier {
 
   /// Manually fetch verdicts from device (called by Sync Now button)
   Future<int> fetchFromDevice(String workerId) async {
+    // Reset device reachability so polling can resume
+    _deviceReachable = true;
+    _failCount = 0;
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final saved = prefs.getString('device_url') ?? '';

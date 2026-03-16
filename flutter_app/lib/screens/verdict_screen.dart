@@ -21,6 +21,27 @@ class VerdictScreen extends StatelessWidget {
         actions: [
           Consumer<VerdictProvider>(
             builder: (_, verdict, __) => IconButton(
+              icon: const Icon(Icons.cloud_download),
+              tooltip: 'Fetch from AWS',
+              onPressed: () async {
+                final workerId = await _getWorkerId();
+                if (workerId.isNotEmpty) {
+                  await verdict.loadVerdicts(workerId);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(verdict.verdicts.isNotEmpty
+                            ? '${verdict.verdicts.length} verdict${verdict.verdicts.length > 1 ? 's' : ''} loaded'
+                            : 'No verdicts found'),
+                      ),
+                    );
+                  }
+                }
+              },
+            ),
+          ),
+          Consumer<VerdictProvider>(
+            builder: (_, verdict, __) => IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: 'Fetch from device',
               onPressed: () async {

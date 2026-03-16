@@ -108,18 +108,45 @@ class AwsSyncService {
 
   /// Fetch latest verdict for a worker
   Future<DearCareVerdict?> fetchLatestVerdict(String workerId) async {
+    final all = await fetchAllVerdicts(workerId);
+    return all.isNotEmpty ? all.first : null;
+  }
+
+  /// Fetch ALL past verdicts from AWS API Gateway (DynamoDB)
+  Future<List<DearCareVerdict>> fetchAllVerdicts(String workerId) async {
+    if (!isConfigured) {
+      debugPrint('[AWS] API URL not configured — cannot fetch verdicts');
+      return [];
+    }
     try {
+      // Use the existing GET /fitu-health/verdict route
       final url = '$_apiGatewayUrl/verdict?worker_id=$workerId';
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+      debugPrint('[AWS] Fetching verdicts from: $url');
+      final response = await http.get(
+        Uri.parse(url),
+      ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        return DearCareVerdict.fromJson(json);
+        final decoded = jsonDecode(response.body);
+        // API returns a list of verdicts
+        if (decoded is List) {
+          debugPrint('[AWS] Received ${decoded.length} verdicts from AWS');
+          return decoded
+              .map((j) => DearCareVerdict.fromJson(j as Map<String, dynamic>))
+              .toList();
+        }
+        // Backwards compat: single verdict object
+        if (decoded is Map<String, dynamic> && decoded.containsKey('encounter_id')) {
+          return [DearCareVerdict.fromJson(decoded)];
+        }
+        debugPrint('[AWS] No verdicts in response');
+      } else {
+        debugPrint('[AWS] Fetch verdicts failed: ${response.statusCode} ${response.body}');
       }
     } catch (e) {
-      debugPrint('[AWS] Fetch verdict error: $e');
+      debugPrint('[AWS] Fetch verdicts error: $e');
     }
-    return null;
+    return [];
   }
 
   /// Fetch verdicts from the Dear-Care device's local HTTP server
