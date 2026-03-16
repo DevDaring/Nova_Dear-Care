@@ -25,7 +25,7 @@ class DearCareVerdict {
     workerId: json['worker_id'] ?? '',
     triageLevel: json['triage_level'] ?? 'ROUTINE',
     summary: json['summary'] ?? '',
-    timestamp: DateTime.parse(json['timestamp']),
+    timestamp: DateTime.tryParse(json['timestamp'] ?? '') ?? DateTime.now(),
     s3Path: json['s3_path'] ?? '',
   );
 

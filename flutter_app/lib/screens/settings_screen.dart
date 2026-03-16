@@ -17,6 +17,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _workerIdController = TextEditingController();
   final TextEditingController _apiUrlController = TextEditingController();
+  final TextEditingController _deviceUrlController = TextEditingController();
   bool _isLoading = true;
 
   @override
@@ -29,11 +30,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     _workerIdController.text = prefs.getString('worker_id') ?? EnvConfig.workerId;
     _apiUrlController.text = prefs.getString('api_gateway_url') ?? EnvConfig.apiGatewayUrl;
+    _deviceUrlController.text = prefs.getString('device_url') ?? EnvConfig.deviceUrl;
 
     // Auto-save defaults on first launch
     if (prefs.getString('worker_id') == null && EnvConfig.workerId != 'YOUR_WORKER_ID') {
       await prefs.setString('worker_id', EnvConfig.workerId);
       await prefs.setString('api_gateway_url', EnvConfig.apiGatewayUrl);
+      await prefs.setString('device_url', EnvConfig.deviceUrl);
     }
     setState(() => _isLoading = false);
   }
@@ -48,11 +51,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     final apiUrl = _apiUrlController.text.trim();
+    final deviceUrl = _deviceUrlController.text.trim();
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('worker_id', workerId);
     if (apiUrl.isNotEmpty) {
       await prefs.setString('api_gateway_url', apiUrl);
+    }
+    if (deviceUrl.isNotEmpty) {
+      await prefs.setString('device_url', deviceUrl);
     }
 
     // Reinitialize health provider with new worker ID
@@ -71,6 +78,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _workerIdController.dispose();
     _apiUrlController.dispose();
+    _deviceUrlController.dispose();
     super.dispose();
   }
 
@@ -118,6 +126,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             labelText: 'API Gateway URL',
                             hintText: 'https://xxx.execute-api.region.amazonaws.com/prod/fitu-health',
                             prefixIcon: Icon(Icons.cloud),
+                            border: OutlineInputBorder(),
+                          ),
+                          keyboardType: TextInputType.url,
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _deviceUrlController,
+                          decoration: const InputDecoration(
+                            labelText: 'Device URL (Dear-Care)',
+                            hintText: 'http://192.168.0.174:8080',
+                            prefixIcon: Icon(Icons.devices),
                             border: OutlineInputBorder(),
                           ),
                           keyboardType: TextInputType.url,

@@ -36,6 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (workerId.isNotEmpty && mounted) {
       context.read<HealthProvider>().initialize(workerId: workerId);
       context.read<VerdictProvider>().loadVerdicts(workerId);
+      context.read<VerdictProvider>().startPolling(workerId);
       _initialized = true;
     }
   }

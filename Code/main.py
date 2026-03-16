@@ -90,6 +90,12 @@ class DearCare:
         # Start background sync
         self.sync.start()
 
+        # Start verdict HTTP server for Fit-U polling
+        import config
+        from verdict_server import start_server as start_verdict_server
+        self._verdict_server = start_verdict_server(config.VERDICT_SERVER_PORT)
+        print(f"[INIT] Verdict server on port {config.VERDICT_SERVER_PORT}")
+
         free_memory()
         from utils import cleanup_temp
         cleanup_temp()
@@ -779,8 +785,10 @@ class DearCare:
 
                 # Start encounter
                 from encounter_manager import EncounterManager
+                import config
                 self.encounter = EncounterManager()
                 eid = self.encounter.start()
+                self.encounter.data["worker_id"] = config.WORKER_ID
                 self.log.info("[MAIN] Encounter %s started", eid)
 
                 # --- Step 1: Collect Aadhaar ---
@@ -956,7 +964,7 @@ class DearCare:
                         import config
                         fitu = FituClient(config)
                         if fitu.is_available():
-                            worker_id = summary.get("worker_id", "")
+                            worker_id = config.WORKER_ID
                             notification_text = lambda_output or f"Encounter {eid} processed for {patient}."
                             fitu.notify_fitu_verdict_ready(
                                 worker_id=worker_id,
@@ -967,6 +975,22 @@ class DearCare:
                             self.log.info("[MAIN] Notification sent to mobile app")
                     except Exception as e:
                         self.log.warning("[MAIN] Fit-U notification error: %s", e)
+
+                    # Push verdict to local HTTP server for Fit-U polling
+                    try:
+                        from verdict_server import add_verdict
+                        import config as _cfg
+                        add_verdict({
+                            "encounter_id": eid,
+                            "worker_id": _cfg.WORKER_ID,
+                            "triage_level": summary.get("triage_level", "ROUTINE"),
+                            "summary": lambda_output or f"Encounter {eid} processed for {patient}.",
+                            "timestamp": summary.get("timestamp", time.strftime("%Y-%m-%dT%H:%M:%S")),
+                            "s3_path": summary.get("s3_path", ""),
+                        })
+                        self.log.info("[MAIN] Verdict pushed to local server")
+                    except Exception as e:
+                        self.log.warning("[MAIN] Verdict server push error: %s", e)
 
                 else:
                     self.speak("Upload pending. Data saved locally.")

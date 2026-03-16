@@ -119,4 +119,20 @@ class AwsSyncService {
     }
     return null;
   }
+
+  /// Fetch verdicts from the Dear-Care device's local HTTP server
+  Future<List<DearCareVerdict>> fetchVerdictsFromDevice(String deviceUrl, String workerId) async {
+    try {
+      final url = '$deviceUrl/api/verdicts?worker_id=$workerId';
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body);
+        return list.map((j) => DearCareVerdict.fromJson(j as Map<String, dynamic>)).toList();
+      }
+    } catch (e) {
+      debugPrint('[AWS] Device verdict poll error: $e');
+    }
+    return [];
+  }
 }
