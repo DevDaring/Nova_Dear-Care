@@ -71,6 +71,25 @@ class VerdictProvider extends ChangeNotifier {
     _firstPoll = false;
   }
 
+  /// Manually fetch verdicts from device (called by Sync Now button)
+  Future<int> fetchFromDevice(String workerId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString('device_url') ?? '';
+      if (saved.isNotEmpty) _deviceUrl = saved;
+    } catch (_) {}
+
+    final results = await _awsService.fetchVerdictsFromDevice(_deviceUrl, workerId);
+    int newCount = 0;
+    for (final verdict in results) {
+      if (_seenIds.contains(verdict.encounterId)) continue;
+      _seenIds.add(verdict.encounterId);
+      addVerdict(verdict);
+      newCount++;
+    }
+    return newCount;
+  }
+
   /// Stop polling
   void stopPolling() {
     _pollTimer?.cancel();

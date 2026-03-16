@@ -192,11 +192,33 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      ElevatedButton(
+                      ElevatedButton.icon(
                         onPressed: health.isSyncing
                             ? null
-                            : () => health.syncNow(workerId: _workerId),
-                        child: const Text('Sync Now'),
+                            : () async {
+                                // Sync health data
+                                health.syncNow(workerId: _workerId);
+                                // Also fetch encounter results from device
+                                if (mounted) {
+                                  final verdictProvider = context.read<VerdictProvider>();
+                                  final newCount = await verdictProvider.fetchFromDevice(_workerId);
+                                  if (newCount > 0 && mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('$newCount new encounter result${newCount > 1 ? 's' : ''} received!'),
+                                        backgroundColor: Colors.green,
+                                        action: SnackBarAction(
+                                          label: 'VIEW',
+                                          textColor: Colors.white,
+                                          onPressed: () => Navigator.pushNamed(context, '/verdict'),
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                        icon: const Icon(Icons.sync),
+                        label: const Text('Sync Now'),
                       ),
                     ],
                   ),

@@ -22,10 +22,20 @@ class VerdictScreen extends StatelessWidget {
           Consumer<VerdictProvider>(
             builder: (_, verdict, __) => IconButton(
               icon: const Icon(Icons.refresh),
+              tooltip: 'Fetch from device',
               onPressed: () async {
                 final workerId = await _getWorkerId();
                 if (workerId.isNotEmpty) {
-                  verdict.loadVerdicts(workerId);
+                  final newCount = await verdict.fetchFromDevice(workerId);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(newCount > 0
+                            ? '$newCount new result${newCount > 1 ? 's' : ''} received!'
+                            : 'No new results'),
+                      ),
+                    );
+                  }
                 }
               },
             ),
