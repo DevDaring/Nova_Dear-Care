@@ -5,6 +5,10 @@
 Code/env
 env
 
+# Flutter app secrets
+flutter_app/.env
+flutter_app/lib/env_config.dart
+
 # Python
 __pycache__/
 *.py[cod]

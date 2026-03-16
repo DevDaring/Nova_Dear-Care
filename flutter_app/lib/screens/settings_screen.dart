@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/health_provider.dart';
 import '../services/aws_sync_service.dart';
+import '../env_config.dart';
 import 'package:provider/provider.dart';
 
 /// Settings Screen - worker ID configuration and app settings
@@ -26,8 +27,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    _workerIdController.text = prefs.getString('worker_id') ?? '';
-    _apiUrlController.text = prefs.getString('api_gateway_url') ?? '';
+    _workerIdController.text = prefs.getString('worker_id') ?? EnvConfig.workerId;
+    _apiUrlController.text = prefs.getString('api_gateway_url') ?? EnvConfig.apiGatewayUrl;
+
+    // Auto-save defaults on first launch
+    if (prefs.getString('worker_id') == null && EnvConfig.workerId != 'YOUR_WORKER_ID') {
+      await prefs.setString('worker_id', EnvConfig.workerId);
+      await prefs.setString('api_gateway_url', EnvConfig.apiGatewayUrl);
+    }
     setState(() => _isLoading = false);
   }
 

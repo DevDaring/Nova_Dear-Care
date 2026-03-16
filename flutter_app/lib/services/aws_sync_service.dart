@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import '../env_config.dart';
 import '../models/health_snapshot.dart';
 import '../models/verdict.dart';
 import 'offline_queue_service.dart';
@@ -10,8 +11,7 @@ import 'offline_queue_service.dart';
 /// AWS Sync Service - sends health data to API Gateway and fetches verdicts
 /// Works gracefully offline - adds to queue when sync fails
 class AwsSyncService {
-  static const String _defaultApiUrl =
-      'https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com/prod/fitu-health';
+  static const String _defaultApiUrl = EnvConfig.apiGatewayUrl;
   String _apiGatewayUrl = _defaultApiUrl;
   final OfflineQueueService _offlineQueue = OfflineQueueService();
 

@@ -53,3 +53,7 @@ test/
 # Generated files
 .metadata
 pubspec.lock
+
+# Local secrets (do not commit)
+.env
+lib/env_config.dart
