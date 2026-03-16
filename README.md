@@ -7,14 +7,14 @@
 
 ## Overview
 
-**Dear-Care** is a portable, voice-activated AI healthcare assistant built for community health workers in rural India. Running on an edge AI device (RDK S100) with **Amazon Nova as the core intelligence layer**, it enables frontline health workers to:
+**Dear-Care** is a portable, voice-activated AI healthcare assistant built for community health workers. Running on an edge AI device (RDK S100) with **Amazon Nova as the core intelligence layer**, it enables frontline health workers to:
 
-- **Speak naturally** in English, Hindi, Bengali, Tamil, Telugu, and Marathi
+- **Speak naturally** in English, Hindi, French, German, Italian, Spanish, and Portuguese
+- **Consult via speech-to-speech** — full duplex conversation powered by Amazon Nova 2 Sonic
 - **Read prescriptions** via Amazon Textract + PaddleOCR
-- **Measure vital signs** (SpO2, heart rate, temperature) with connected sensors
-- **Get AI-powered triage** via Amazon Bedrock (Nova Lite)
-- **Generate clinical notes** with AWS Lambda + Bedrock
-- **Identify patients** through Aadhaar number collection
+- **Measure vital signs** (SpO2, heart rate, temperature, pressure) with connected sensors
+- **Get AI-powered clinical notes** via AWS Lambda + Amazon Nova Lite
+- **Identify patients** through Aadhaar number collection and lookup
 - **Work fully offline** — every AWS service has a local fallback
 
 ---
@@ -23,24 +23,34 @@
 
 | Nova Service | Usage in Dear-Care | Status |
 |---|---|---|
-| **Amazon Nova Lite** | LLM for intent classification, triage review, clinical notes, health Q&A | Active |
-| **Amazon Nova Sonic** | Primary voice engine (TTS via bidirectional streaming) | Ready (requires Python 3.12+ SDK) |
-| **Amazon Polly** (Kajal Neural) | Voice synthesis fallback | Active fallback |
+| **Amazon Nova 2 Sonic** | Primary voice engine — TTS via bidirectional streaming; speech-to-speech consultation mode | Active |
+| **Amazon Nova Lite** | LLM for intent classification, prescription analysis, health analysis, clinical notes, chat | Active |
+| **Amazon Polly** (Neural) | TTS fallback when Nova 2 Sonic is unavailable | Active fallback |
 | **Amazon Transcribe** | Speech-to-text for voice commands | Active |
 
 ### Voice Pipeline
 
+**Normal flow (TTS only):**
 ```
 User speaks → Jabra Mic → Amazon Transcribe (STT)
-    → Nova Lite (intent + response) 
-    → Nova Sonic (TTS, primary) / Polly (TTS, fallback)
+    → Nova Lite (intent + response)
+    → Nova 2 Sonic (TTS, primary) / Polly (TTS, fallback) / pyttsx3 (offline)
     → Bose Bluetooth Speaker
 ```
 
-Nova Sonic is the primary TTS engine. When the `aws-sdk-bedrock-runtime` package
-is available (Python 3.12+), it uses the bidirectional streaming API
-(`InvokeModelWithBidirectionalStream`) with model `amazon.nova-sonic-v1:0`.
-On Python 3.10 (current RDK OS), it gracefully falls back to Amazon Polly Neural.
+**Consultation mode (speech-to-speech):**
+```
+User speaks → Jabra Mic → Amazon Transcribe (STT)
+    → Nova 2 Sonic (bidirectional streaming: speech-to-speech)
+    → Bose Bluetooth Speaker
+    (multi-turn conversation with patient context)
+```
+
+Nova 2 Sonic (`amazon.nova-2-sonic-v1:0`) is the primary voice engine using the
+bidirectional streaming API (`InvokeModelWithBidirectionalStream`) via
+`aws-sdk-bedrock-runtime` (Python 3.12+). In normal flow, it acts as TTS only
+(text input + silent audio). In consultation mode, it powers full speech-to-speech
+conversations with patient context. Falls back to Amazon Polly Neural → pyttsx3 offline.
 
 ---
 
@@ -93,9 +103,9 @@ On Python 3.10 (current RDK OS), it gracefully falls back to Amazon Polly Neural
 
 | Service | Purpose | Fallback |
 |---------|---------|----------|
-| **Amazon Bedrock** (Nova Lite) | Intent classification, health Q&A, triage review, clinical notes | Keyword matching + rule-based triage |
-| **Amazon Bedrock** (Nova Sonic) | Primary TTS voice engine | Amazon Polly → pyttsx3 |
-| **Amazon Polly** (Kajal Neural) | Secondary TTS for 6 Indian languages | pyttsx3 offline |
+| **Amazon Bedrock** (Nova Lite) | Intent classification, prescription analysis, health Q&A, clinical notes | Keyword matching + rule-based triage |
+| **Amazon Bedrock** (Nova 2 Sonic) | Primary TTS + speech-to-speech consultation | Amazon Polly → pyttsx3 |
+| **Amazon Polly** (Neural) | Secondary TTS fallback for 7 languages | pyttsx3 offline |
 | **Amazon Transcribe** Streaming | Real-time speech-to-text | SpeechRecognition offline |
 | **Amazon Textract** | Prescription OCR | PaddleOCR 2.7.0 |
 | **Amazon S3** | Encounter data + clinical notes storage | Local CSV + JSON |
@@ -111,10 +121,14 @@ On Python 3.10 (current RDK OS), it gracefully falls back to Amazon Polly Neural
 ## Healthcare Flow
 
 ```
-Language Selection → Wake Word ("Hello Kamal") → Aadhaar Collection
-    → Patient Lookup → Health Inquiry → Prescription Capture Loop
-    → Pulse Sensor (3 attempts) → Environment Sensors
-    → Final AI Analysis (Bedrock Nova Lite) → Save & Sync → Next Patient
+Aadhaar Collection → Patient Lookup (CSV database)
+    → Prescription Capture (optional, multi-document)
+    → Pulse / SpO2 Sensor (MAX30102)
+    → Environment Sensors (BMP280)
+    → Save & Upload → AWS Lambda (clinical notes via Nova Lite)
+    → Speak Lambda Results
+    → Health Consultation (optional, speech-to-speech via Nova 2 Sonic)
+    → Next Patient
 ```
 
 ---
@@ -183,7 +197,7 @@ Nova_Dear-Care/
 │   ├── ocr_handler.py           # Textract + PaddleOCR
 │   ├── sensor_handler.py        # MAX30102 + BMP280 I2C sensors
 │   ├── intent_handler.py        # Bedrock + keyword intent classification
-│   ├── language_handler.py      # 6 Indian languages, Polly voice mapping
+│   ├── language_handler.py      # 7 languages (Nova 2 Sonic supported), Polly voice mapping
 │   ├── storage_manager.py       # Local CSV + JSON storage
 │   ├── sync_manager.py          # S3 sync with Lambda trigger
 │   ├── fitu_client.py           # Fit-U mobile app DynamoDB/SNS integration
@@ -226,17 +240,20 @@ FITU_DYNAMODB_TABLE=dear-care-fitu-health
 
 ---
 
-## Voice Commands
+## Voice Interaction
 
-| Command | Action |
-|---------|--------|
-| "Hello Kamal, start encounter" | Begin new patient encounter |
-| "Hello Kamal, take a picture" | Capture and OCR a prescription |
-| "Hello Kamal, measure vitals" | Read SpO2, heart rate, temperature |
-| "Hello Kamal, record cough" | Record audio symptom |
-| "Hello Kamal, sync data" | Upload encounters to S3 |
-| "Hello Kamal, change language" | Switch language |
-| "Hello Kamal, help" | List available commands |
+Dear-Care uses a guided sequential flow. The assistant speaks prompts and the
+health worker responds naturally. No wake word needed — each step is voice-guided:
+
+| Step | Action |
+|------|--------|
+| 1 | Collect Aadhaar number (voice → Nova Lite extraction) |
+| 2 | Patient lookup (existing record) or new registration |
+| 3 | Prescription capture (optional, camera → Textract/PaddleOCR → Nova Lite analysis) |
+| 4 | Pulse / SpO2 measurement (MAX30102 sensor) |
+| 5 | Environment readings (BMP280 — temperature, pressure) |
+| 6 | Save & upload → Lambda processes clinical notes → results spoken back |
+| 7 | Health consultation (optional — speech-to-speech via Nova 2 Sonic) |
 
 ---
 
@@ -251,16 +268,17 @@ MIT License — DevDaring 2025
 ```
 AI_4_Bharat/
 ├── Code/                       # Main application
-│   ├── main.py                 # Entry point
+│   ├── main.py                 # Entry point + sequential healthcare flow
 │   ├── guided_flow.py          # Guided encounter orchestrator
-│   ├── aws_handler.py          # Bedrock, S3, Lambda, Textract
+│   ├── aws_handler.py          # Bedrock (Nova 2 Sonic + Nova Lite), S3, Lambda, Textract
 │   ├── intent_handler.py       # Bedrock LLM intent classifier
-│   ├── voice_handler.py        # Polly TTS + Transcribe STT
+│   ├── voice_handler.py        # Nova 2 Sonic TTS + Polly fallback + Transcribe STT
 │   ├── ocr_handler.py          # Textract + PaddleOCR
 │   ├── sensor_handler.py       # MAX30102 + BMP280 drivers
 │   ├── camera_handler.py       # SC230AI MIPI capture
 │   ├── encounter_manager.py    # Patient encounter state machine
 │   ├── storage_manager.py      # CSV database + Aadhaar lookup
+│   ├── language_handler.py     # 7 languages (Nova 2 Sonic supported)
 │   ├── triage_engine.py        # Clinical triage engine
 │   ├── config.py               # Configuration + prompts
 │   ├── Sensor_Setup_Guide.md   # Hardware setup docs
@@ -274,12 +292,13 @@ AI_4_Bharat/
 
 ## AWS Services Used
 
-- **Amazon Bedrock** (Nova Lite v1:0) — LLM for intent, Aadhaar, health analysis, prescriptions
-- **Amazon Polly** — Neural TTS (Kajal voice, en-IN / hi-IN)
-- **Amazon Transcribe** — STT (en-IN, hi-IN, bn-IN)
+- **Amazon Bedrock** (Nova 2 Sonic) — Primary TTS engine + speech-to-speech consultation
+- **Amazon Bedrock** (Nova Lite v1:0) — LLM for intent, Aadhaar extraction, health analysis, prescriptions
+- **Amazon Polly** — Neural TTS fallback (7 languages)
+- **Amazon Transcribe** — Real-time streaming STT
 - **Amazon Textract** — Document OCR
 - **Amazon S3** — Cloud storage for encounters
-- **AWS Lambda** — Clinical notes generation
+- **AWS Lambda** — Clinical notes generation via Nova Lite
 - **AWS IAM** — Access control
 
 ---

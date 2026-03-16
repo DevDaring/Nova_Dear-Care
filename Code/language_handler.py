@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 """
 language_handler.py - Multilingual support for Dear-Care on RDK S100.
-Maps Indian languages to AWS Polly voices and Transcribe language codes.
+Maps Nova 2 Sonic supported languages to AWS Polly voices and Transcribe codes.
 """
 
 from typing import Optional, Dict
 
-# Supported languages with Polly voice IDs and Transcribe codes
+# Supported languages — aligned with Amazon Nova 2 Sonic capabilities.
+# Polly voices serve as TTS fallback when Nova Sonic is unavailable.
 LANGUAGES: Dict[str, Dict] = {
     "en": {
         "name": "English",
         "name_local": "English",
-        "polly_voice": "Kajal",
+        "polly_voice": "Matthew",
         "polly_engine": "neural",
-        "polly_lang": "en-IN",
-        "transcribe_lang": "en-IN",
+        "polly_lang": "en-US",
+        "transcribe_lang": "en-US",
     },
     "hi": {
         "name": "Hindi",
@@ -24,77 +25,45 @@ LANGUAGES: Dict[str, Dict] = {
         "polly_lang": "hi-IN",
         "transcribe_lang": "hi-IN",
     },
-    "bn": {
-        "name": "Bengali",
-        "name_local": "বাংলা",
-        "polly_voice": None,
-        "polly_engine": "standard",
-        "polly_lang": "bn-IN",
-        "transcribe_lang": "bn-IN",
+    "fr": {
+        "name": "French",
+        "name_local": "Français",
+        "polly_voice": "Lea",
+        "polly_engine": "neural",
+        "polly_lang": "fr-FR",
+        "transcribe_lang": "fr-FR",
     },
-    "ta": {
-        "name": "Tamil",
-        "name_local": "தமிழ்",
-        "polly_voice": None,
-        "polly_engine": "standard",
-        "polly_lang": "ta-IN",
-        "transcribe_lang": "ta-IN",
+    "de": {
+        "name": "German",
+        "name_local": "Deutsch",
+        "polly_voice": "Vicki",
+        "polly_engine": "neural",
+        "polly_lang": "de-DE",
+        "transcribe_lang": "de-DE",
     },
-    "te": {
-        "name": "Telugu",
-        "name_local": "తెలుగు",
-        "polly_voice": None,
-        "polly_engine": "standard",
-        "polly_lang": "te-IN",
-        "transcribe_lang": "te-IN",
+    "it": {
+        "name": "Italian",
+        "name_local": "Italiano",
+        "polly_voice": "Bianca",
+        "polly_engine": "neural",
+        "polly_lang": "it-IT",
+        "transcribe_lang": "it-IT",
     },
-    "mr": {
-        "name": "Marathi",
-        "name_local": "मराठी",
-        "polly_voice": None,
-        "polly_engine": "standard",
-        "polly_lang": "mr-IN",
-        "transcribe_lang": "mr-IN",
+    "es": {
+        "name": "Spanish",
+        "name_local": "Español",
+        "polly_voice": "Lucia",
+        "polly_engine": "neural",
+        "polly_lang": "es-ES",
+        "transcribe_lang": "es-ES",
     },
-    "gu": {
-        "name": "Gujarati",
-        "name_local": "ગુજરાતી",
-        "polly_voice": None,
-        "polly_engine": "standard",
-        "polly_lang": "gu-IN",
-        "transcribe_lang": "gu-IN",
-    },
-    "kn": {
-        "name": "Kannada",
-        "name_local": "ಕನ್ನಡ",
-        "polly_voice": None,
-        "polly_engine": "standard",
-        "polly_lang": "kn-IN",
-        "transcribe_lang": "kn-IN",
-    },
-    "ml": {
-        "name": "Malayalam",
-        "name_local": "മലയാളം",
-        "polly_voice": None,
-        "polly_engine": "standard",
-        "polly_lang": "ml-IN",
-        "transcribe_lang": "ml-IN",
-    },
-    "or": {
-        "name": "Odia",
-        "name_local": "ଓଡ଼ିଆ",
-        "polly_voice": None,
-        "polly_engine": "standard",
-        "polly_lang": "or-IN",
-        "transcribe_lang": None,
-    },
-    "pa": {
-        "name": "Punjabi",
-        "name_local": "ਪੰਜਾਬੀ",
-        "polly_voice": None,
-        "polly_engine": "standard",
-        "polly_lang": "pa-IN",
-        "transcribe_lang": "pa-IN",
+    "pt": {
+        "name": "Portuguese",
+        "name_local": "Português",
+        "polly_voice": "Camila",
+        "polly_engine": "neural",
+        "polly_lang": "pt-BR",
+        "transcribe_lang": "pt-BR",
     },
 }
 
@@ -141,17 +110,13 @@ def detect_language_from_text(text: str) -> str:
     """Simple heuristic language detection from text keywords."""
     text_l = text.lower()
     lang_triggers = {
-        "hindi": "hi", "speak hindi": "hi", "हिन्दी": "hi",
-        "tamil": "ta", "speak tamil": "ta", "தமிழ்": "ta",
-        "telugu": "te", "speak telugu": "te", "తెలుగు": "te",
-        "bengali": "bn", "speak bengali": "bn", "বাংলা": "bn",
-        "marathi": "mr", "speak marathi": "mr", "मराठी": "mr",
-        "gujarati": "gu", "ગુજરાતી": "gu",
-        "kannada": "kn", "ಕನ್ನಡ": "kn",
-        "malayalam": "ml", "മലയാളം": "ml",
-        "odia": "or", "ଓଡ଼ିଆ": "or",
-        "punjabi": "pa", "ਪੰਜਾਬੀ": "pa",
         "english": "en", "speak english": "en",
+        "hindi": "hi", "speak hindi": "hi", "हिन्दी": "hi",
+        "french": "fr", "speak french": "fr", "français": "fr",
+        "german": "de", "speak german": "de", "deutsch": "de",
+        "italian": "it", "speak italian": "it", "italiano": "it",
+        "spanish": "es", "speak spanish": "es", "español": "es",
+        "portuguese": "pt", "speak portuguese": "pt", "português": "pt",
     }
     for trigger, code in lang_triggers.items():
         if trigger in text_l:

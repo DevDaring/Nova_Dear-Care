@@ -439,7 +439,7 @@ def invoke_nova_sonic_voice(text_prompt: str, language_code: str = "en-IN") -> O
             except asyncio.CancelledError:
                 pass
 
-            # 10. Cleanup — send end events and close
+            # 10. Cleanup — send end events and close gracefully
             try:
                 await _send({"event": {"contentEnd": {"promptName": prompt_name, "contentName": audio_content_name}}})
                 await _send({"event": {"promptEnd": {"promptName": prompt_name}}})
@@ -447,16 +447,26 @@ def invoke_nova_sonic_voice(text_prompt: str, language_code: str = "en-IN") -> O
             except Exception:
                 pass
 
+            # Give CRT time to drain pending HTTP callbacks before closing
+            await asyncio.sleep(0.2)
+
+            # Let reader finish naturally before closing the stream
+            try:
+                await asyncio.wait_for(reader_task, timeout=2.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                reader_task.cancel()
+                try:
+                    await reader_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+
             try:
                 await stream.input_stream.close()
             except Exception:
                 pass
 
-            reader_task.cancel()
-            try:
-                await reader_task
-            except asyncio.CancelledError:
-                pass
+            # Brief pause to let CRT finish HTTP teardown
+            await asyncio.sleep(0.1)
 
             return b"".join(audio_chunks) if audio_chunks else None
 
