@@ -4,7 +4,7 @@ Receives encounter data from S3, generates clinical notes via Bedrock,
 stores results back in S3.
 
 Integrates with Fit-U mobile companion app:
-  - Fetches ASHA worker health/mobility data from DynamoDB (if available)
+  - Fetches health worker health/mobility data from DynamoDB (if available)
   - Stores verdicts in DynamoDB for mobile app polling
   - Sends SNS notification to mobile app after each decision
 
@@ -41,7 +41,7 @@ def handler(event, context):
     {
         "encounter_id": "ENC-20250101-ABCD",
         "action": "generate_notes",
-        "worker_id": "ASHA-001"  (optional, for Fit-U integration)
+        "worker_id": "DC-001"  (optional, for Fit-U integration)
     }
     """
     encounter_id = event.get("encounter_id", "")
@@ -59,7 +59,7 @@ def handler(event, context):
 
         # Derive worker_id from encounter data if not provided
         if not worker_id:
-            worker_id = data.get("asha_worker_id", data.get("worker_id", ""))
+            worker_id = data.get("worker_id", "")
 
         # Fetch Fit-U mobile app data (graceful fallback if unavailable)
         fitu_data = _fetch_fitu_data(worker_id)

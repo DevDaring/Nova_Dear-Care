@@ -1,6 +1,6 @@
 ```mermaid
 flowchart LR
-    A[Home Screen<br/>Hello ASHA<br/>Start Patient<br/>Sync Status]
+    A[Home Screen<br/>Hello Kamal<br/>Start Patient<br/>Sync Status]
 
     B[Patient Details<br/>Name Age Gender<br/>Capture Photo]
 

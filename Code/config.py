@@ -142,7 +142,7 @@ TRANSCRIBE_SAMPLE_RATE = 16000
 # ============================================================
 # SECURITY
 # ============================================================
-DEARCARE_PIN_HASH = os.getenv("DEARCARE_PIN_HASH", os.getenv("ASHA_PIN_HASH", ""))
+DEARCARE_PIN_HASH = os.getenv("DEARCARE_PIN_HASH", "")
 DATA_RETENTION_DAYS = 30
 MAX_OFFLINE_ENCOUNTERS = 100
 
@@ -240,7 +240,7 @@ ENCOUNTER_START = (
 # ============================================================
 # BEDROCK SYSTEM PROMPT
 # ============================================================
-SYSTEM_PROMPT = """You are Kamal, an AI healthcare assistant for rural Indian ASHA workers.
+SYSTEM_PROMPT = """You are Kamal, an AI healthcare assistant for rural Indian community health workers.
 You help with patient triage, prescription reading, and health education.
 
 RULES:
@@ -317,7 +317,7 @@ Keep response under 8 sentences."""
 # CSV SCHEMA
 # ============================================================
 CSV_HEADERS = [
-    "encounter_id", "timestamp", "asha_worker_id", "patient_id",
+    "encounter_id", "timestamp", "worker_id", "patient_id",
     "aadhaar_number", "patient_name", "age", "gender", "spo2", "heart_rate",
     "temperature", "triage_level", "triage_confidence",
     "sync_status", "photo_count", "audio_count", "notes",

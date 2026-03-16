@@ -179,7 +179,7 @@ class DearCare:
         import select
         import threading
 
-        prompt = "Say 'Hello Asha' + command, or type: " if require_wake else "Listening (or type): "
+        prompt = "Say 'Hello Kamal' + command, or type: " if require_wake else "Listening (or type): "
         print(f"\n  > {prompt}", end="", flush=True)
 
         # Quick non-blocking stdin check
@@ -297,7 +297,7 @@ class DearCare:
 
         # THANKS
         if intent == Intent.THANKS:
-            return "You're welcome! Say Hello Asha when you need me.", False
+            return "You're welcome! Say Hello Kamal when you need me.", False
 
         # HEALTH QUESTION — use Bedrock
         if intent == Intent.HEALTH_QUESTION:
@@ -472,7 +472,7 @@ class DearCare:
             "Answer health questions. "
             "Sync data to the cloud. "
             "Change language. "
-            "Say Hello Asha followed by your command."
+            "Say Hello Kamal followed by your command."
         )
 
     # ------------------------------------------------------------------
@@ -499,6 +499,7 @@ class DearCare:
 
                 if not command:
                     needs_followup = False
+                    time.sleep(0.3)
                     continue
 
                 # If encounter is active and in DEMOGRAPHICS state, parse demographics

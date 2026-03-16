@@ -194,7 +194,7 @@ def text_to_speech(text: str, output_path: str) -> bool:
     if _try_nova_sonic_tts(text, output_path):
         return True
     # Fallback to Polly
-    _logger().info("[TTS] FALLBACK-1: Polly — Nova2Sonic unavailable")
+    _logger().info("[TTS] FALLBACK-1: Polly — NovaSonic unavailable")
     if _try_polly_tts(text, output_path):
         return True
     # Final fallback to pyttsx3
@@ -215,11 +215,11 @@ def _try_nova_sonic_tts(text: str, output_path: str) -> bool:
         if pcm_audio:
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
             _pcm_to_wav(pcm_audio, output_path)
-            _logger().info("[TTS] PRIMARY: Nova2Sonic generated: %s", output_path)
+            _logger().info("[TTS] PRIMARY: NovaSonic generated: %s", output_path)
             return True
         return False
     except Exception as e:
-        _logger().warning("[TTS] Nova2Sonic error: %s", e)
+        _logger().warning("[TTS] NovaSonic error: %s", e)
         return False
 
 
@@ -460,7 +460,7 @@ def listen_for_wake_word(duration: int = 7) -> Tuple[bool, str]:
 
 
 def detect_wake_word(text: str) -> Tuple[bool, str]:
-    """Check if text contains wake word 'asha' and extract command."""
+    """Check if text contains wake word and extract command."""
     if not text:
         return False, ""
     text_l = text.lower().strip()

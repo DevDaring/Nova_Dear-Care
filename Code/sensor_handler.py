@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 sensor_handler.py - MAX30102 (SpO2/HR) and BME280 (Temp/Humidity) sensor handler
-for Pocket ASHA on RDK S100.
+for Dear-Care on RDK S100.
 
 Graceful failure: If a sensor is not connected, methods return None instead of crashing.
 """

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ocr_handler.py - PaddleOCR (offline) + Amazon Textract (online) for Pocket ASHA.
+ocr_handler.py - PaddleOCR (offline) + Amazon Textract (online) for Dear-Care.
 
 PaddleOCR is lazy-loaded and explicitly unloaded to conserve RAM.
 Run with: env -u LD_LIBRARY_PATH -u LD_PRELOAD python3 ...

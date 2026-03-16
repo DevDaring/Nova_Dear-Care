@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-storage_manager.py - Local CSV database and media storage for Pocket ASHA
+storage_manager.py - Local CSV database and media storage for Dear-Care
 """
 
 import os

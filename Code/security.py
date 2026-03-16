@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-security.py - Security module for Pocket ASHA System
+security.py - Security module for Dear-Care System
 PIN authentication and AES-256 data encryption.
 """
 
@@ -16,7 +16,7 @@ _KEY_FILE = Path(__file__).parent / "data" / ".keyfile"
 
 def hash_pin(pin: str) -> str:
     """Hash a PIN using SHA-256 with salt."""
-    salt = "pocket_asha_salt_v1"
+    salt = "dear_care_salt_v1"
     return hashlib.sha256(f"{salt}{pin}".encode()).hexdigest()
 
 

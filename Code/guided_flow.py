@@ -677,7 +677,7 @@ class GuidedFlow:
         try:
             # Get worker ID - you may want to store this earlier in the flow
             # For now, use a default or get from encounter data
-            worker_id = self.enc.data.get("asha_worker_id", "ASHA_WK_001")
+            worker_id = self.enc.data.get("worker_id", "DC_WK_001")
             self.fitu_data = self.enc.fetch_fitu_data(worker_id)
             if self.fitu_data:
                 _logger().info("[GF] Fit-U data loaded for analysis")

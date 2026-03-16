@@ -113,7 +113,7 @@ class SyncManager:
                     try:
                         fitu = self._get_fitu_client()
                         if fitu:
-                            worker_id = enc.get("asha_worker_id", enc.get("worker_id", ""))
+                            worker_id = enc.get("worker_id", "")
                             triage = enc.get("triage_level", "ROUTINE")
                             summary = enc.get("notes", enc.get("ai_summary", "Health assessment complete."))
                             fitu.notify_fitu_verdict_ready(

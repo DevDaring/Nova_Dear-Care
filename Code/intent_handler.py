@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-intent_handler.py - Intent classification for Pocket ASHA.
+intent_handler.py - Intent classification for Dear-Care.
 Primary: AWS Bedrock LLM classification. Fallback: keyword matching.
 """
 

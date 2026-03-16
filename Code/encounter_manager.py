@@ -303,7 +303,7 @@ class EncounterManager:
         Should be called before final AI analysis.
 
         Args:
-            worker_id: The ASHA worker ID
+            worker_id: The health worker ID
 
         Returns:
             Dict with Fit-U health data or empty dict if unavailable

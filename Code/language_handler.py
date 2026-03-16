@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-language_handler.py - Multilingual support for Pocket ASHA on RDK S100.
+language_handler.py - Multilingual support for Dear-Care on RDK S100.
 Maps Indian languages to AWS Polly voices and Transcribe language codes.
 """
 

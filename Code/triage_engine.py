@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-triage_engine.py - On-device clinical triage for Pocket ASHA.
+triage_engine.py - On-device clinical triage for Dear-Care.
 Rule-based assessment that works entirely offline. < 10s completion.
 """
 

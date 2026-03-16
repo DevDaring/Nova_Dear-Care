@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-aws_handler.py - AWS Bedrock (LLM), S3, Lambda, and Nova 2 Sonic integration for Dear-Care.
+aws_handler.py - AWS Bedrock (LLM), S3, Lambda, and Nova Sonic integration for Dear-Care.
 Uses Amazon Nova Lite (amazon.nova-lite-v1:0) via Bedrock for text.
-Uses Amazon Nova 2 Sonic (amazon.nova-sonic-v2:0) via Bedrock for voice.
+Uses Amazon Nova Sonic (amazon.nova-sonic-v1:0) via Bedrock for voice (requires aws-sdk-bedrock-runtime).
 """
 
 import json
@@ -17,8 +17,8 @@ _s3_client = None
 _lambda_client = None
 _chat_history: List[Dict] = []
 
-# Nova 2 Sonic Model ID
-NOVA_SONIC_MODEL_ID = "amazon.nova-sonic-v2:0"
+# Nova Sonic Model ID
+NOVA_SONIC_MODEL_ID = "amazon.nova-sonic-v1:0"
 
 
 def _logger():
@@ -255,55 +255,91 @@ MOBILITY DATA (from Fit-U companion app):
 
 def invoke_nova_sonic_voice(text_prompt: str, language_code: str = "en-IN") -> Optional[bytes]:
     """
-    Invoke Amazon Nova 2 Sonic for real-time voice response.
+    Invoke Amazon Nova Sonic for real-time voice response.
+    Uses the bidirectional streaming API via aws-sdk-bedrock-runtime (requires Python 3.12+).
     Returns raw PCM audio bytes to be played through the speaker.
-    Falls back to None if Nova Sonic is unavailable (caller should use Polly).
-
-    Args:
-        text_prompt: The text to convert to speech
-        language_code: Language code (default: en-IN)
-
-    Returns:
-        PCM audio bytes or None on failure
+    Falls back to None if Nova Sonic SDK is unavailable (caller should use Polly).
     """
     try:
-        client = _get_bedrock_streaming()
-
-        request_body = {
-            "inputText": text_prompt,
-            "voiceConfig": {
-                "voiceId": "Kamal",
-                "languageCode": language_code
-            },
-            "audioConfig": {
-                "audioType": "SPEECH",
-                "encoding": "pcm",
-                "sampleRateHertz": 16000
-            }
-        }
-
-        response = client.invoke_model_with_response_stream(
-            modelId=NOVA_SONIC_MODEL_ID,
-            body=json.dumps(request_body),
-            contentType="application/json"
+        # Nova Sonic requires aws-sdk-bedrock-runtime with InvokeModelWithBidirectionalStream
+        from aws_sdk_bedrock_runtime import BedrockRuntimeClient, InvokeModelWithBidirectionalStreamOperationInput
+        from aws_sdk_bedrock_runtime.models import (
+            InvokeModelWithBidirectionalStreamInputChunk,
+            BidirectionalInputPayloadPart,
         )
+        import asyncio
+        from config import AWS_REGION
 
-        audio_chunks = []
-        for event in response.get("body", []):
-            chunk = event.get("chunk")
-            if chunk:
-                audio_chunks.append(chunk.get("bytes", b""))
+        async def _run_nova_sonic():
+            client = BedrockRuntimeClient(region=AWS_REGION)
 
-        if audio_chunks:
-            audio_bytes = b"".join(audio_chunks)
-            _logger().info("[AWS] Nova2Sonic: Generated %d bytes of audio", len(audio_bytes))
-            return audio_bytes
+            # Build session config
+            session_config = {
+                "inputAudioFormat": {"audioFormatDescription": {"sampleRateHertz": 16000, "sampleSizeBits": 16, "numChannels": 1, "encoding": "pcm"}},
+                "outputAudioFormat": {"audioFormatDescription": {"sampleRateHertz": 16000, "sampleSizeBits": 16, "numChannels": 1, "encoding": "pcm"}},
+                "textInputConfig": {"mediaType": "text/plain"},
+                "sessionId": f"dearcare-{__import__('uuid').uuid4().hex[:8]}",
+            }
+
+            input_stream = asyncio.Queue()
+            audio_chunks = []
+
+            # Send session start event
+            session_event = {"event": {"sessionConfiguration": session_config}}
+            await input_stream.put(InvokeModelWithBidirectionalStreamInputChunk(
+                value=BidirectionalInputPayloadPart(bytes_=json.dumps(session_event).encode())
+            ))
+
+            # Send text input
+            text_event = {
+                "event": {
+                    "textInput": {
+                        "value": text_prompt,
+                        "role": "USER"
+                    }
+                }
+            }
+            await input_stream.put(InvokeModelWithBidirectionalStreamInputChunk(
+                value=BidirectionalInputPayloadPart(bytes_=json.dumps(text_event).encode())
+            ))
+
+            # Signal end of input
+            await input_stream.put(None)
+
+            async def input_stream_gen():
+                while True:
+                    chunk = await input_stream.get()
+                    if chunk is None:
+                        break
+                    yield chunk
+
+            response = await client.invoke_model_with_bidirectional_stream(
+                InvokeModelWithBidirectionalStreamOperationInput(
+                    model_id=NOVA_SONIC_MODEL_ID,
+                    body=input_stream_gen()
+                )
+            )
+
+            async for event in response.body:
+                if hasattr(event, 'value') and hasattr(event.value, 'bytes_'):
+                    audio_chunks.append(event.value.bytes_)
+
+            await client.close()
+            return b"".join(audio_chunks) if audio_chunks else None
+
+        result = asyncio.run(_run_nova_sonic())
+        if result:
+            _logger().info("[AWS] NovaSonic: Generated %d bytes of audio", len(result))
+            return result
         else:
-            _logger().warning("[AWS] Nova2Sonic: No audio data received")
+            _logger().warning("[AWS] NovaSonic: No audio data received")
             return None
 
+    except ImportError:
+        _logger().info("[AWS] NovaSonic SDK not available (requires Python 3.12+) — using Polly fallback")
+        return None
     except Exception as e:
-        _logger().warning("[AWS] Nova2Sonic fallback: %s", e)
+        _logger().warning("[AWS] NovaSonic fallback: %s", e)
         return None
 
 

@@ -87,7 +87,7 @@ class FituClient:
         Reads the latest Fit-U health snapshot for the given worker from DynamoDB.
 
         Args:
-            worker_id: The ASHA worker ID
+            worker_id: The health worker ID
 
         Returns:
             Dict with keys: steps, distance_km, speed_kmh, activity,
@@ -145,7 +145,7 @@ class FituClient:
         Publishes an SNS message that triggers a push notification on the Fit-U app.
 
         Args:
-            worker_id: The ASHA worker ID
+            worker_id: The health worker ID
             encounter_id: The encounter ID
             triage_level: "URGENT" | "FOLLOW_UP" | "ROUTINE"
             summary: 1-2 sentence plain-language summary from Bedrock

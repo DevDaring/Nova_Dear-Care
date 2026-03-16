@@ -1,9 +1,9 @@
 #!/bin/bash
-# deploy_lambda.sh - Deploy Pocket ASHA Lambda function via CLI
+# deploy_lambda.sh - Deploy Dear-Care Lambda function via CLI
 # Usage: bash deploy_lambda.sh
 set -e
 
-FUNCTION_NAME="pocket-asha-clinical-notes"
+FUNCTION_NAME="pocket-asha-clinical-notes"  # Already deployed with this name on AWS — do not change
 REGION="us-east-1"
 ACCOUNT_ID="${AWS_ACCOUNT_ID:-your_account_id}"
 S3_BUCKET="${S3_BUCKET_NAME:-dear-care-data-${ACCOUNT_ID}}"
@@ -17,7 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LAMBDA_DIR="${SCRIPT_DIR}/lambda"
 
 echo "============================================"
-echo "  Deploying Pocket ASHA Lambda Function"
+echo "  Deploying Dear-Care Lambda Function"
 echo "============================================"
 
 # 1. Create IAM role if it doesn't exist

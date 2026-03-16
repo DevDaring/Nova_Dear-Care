@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-utils.py - Utility functions for Pocket ASHA System
+utils.py - Utility functions for Dear-Care System
 """
 
 import gc
@@ -52,9 +52,9 @@ def setup_logging(log_dir=None):
     log_dir = log_dir or str(LOG_DIR)
     Path(log_dir).mkdir(parents=True, exist_ok=True)
 
-    log_file = os.path.join(log_dir, f"asha_{get_timestamp_compact()}.log")
+    log_file = os.path.join(log_dir, f"dearcare_{get_timestamp_compact()}.log")
 
-    _logger = logging.getLogger("pocket_asha")
+    _logger = logging.getLogger("dear_care")
     _logger.setLevel(logging.INFO)
 
     # Prevent duplicate handlers on repeated calls
@@ -87,7 +87,7 @@ def get_logger():
 def signal_handler(sig, frame):
     """Handle Ctrl+C gracefully."""
     global _running
-    print("\n[ASHA] Shutting down gracefully...")
+    print("\n[KAMAL] Shutting down gracefully...")
     _running = False
 
 

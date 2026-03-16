@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-camera_handler.py - SC230AI MIPI Camera handler for Pocket ASHA on RDK S100.
+camera_handler.py - SC230AI MIPI Camera handler for Dear-Care on RDK S100.
 
 Uses the C binary `get_vin_data -s 6` (sensor index 6 = SC230AI) to capture
 RAW10 frames, then decodes them using linear 10-bit bitpacked unpack + Bayer
