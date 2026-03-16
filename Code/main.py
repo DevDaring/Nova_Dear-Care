@@ -20,6 +20,7 @@ import os
 import sys
 import gc
 import json
+import re
 import time
 import signal
 import argparse
