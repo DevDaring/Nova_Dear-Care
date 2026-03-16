@@ -914,20 +914,10 @@ class DearCare:
                         from aws_handler import invoke_lambda
                         eid = summary.get("encounter_id", "")
 
-                        # Build payload with all collected data
+                        # Primary: health_summary — consolidated report
                         payload = {
                             "encounter_id": eid,
-                            "action": "process_encounter",
-                            "patient_name": summary.get("patient_name", ""),
-                            "aadhaar_number": summary.get("aadhaar_number", ""),
-                            "age": summary.get("age", ""),
-                            "gender": summary.get("gender", ""),
-                            "spo2": summary.get("spo2", ""),
-                            "heart_rate": summary.get("heart_rate", ""),
-                            "temperature": summary.get("temperature", ""),
-                            "prescriptions": self.prescriptions[:1000] if self.prescriptions else "",
-                            "notes": summary.get("notes", ""),
-                            "env_pressure": str(self.env_data.get("pressure", "")),
+                            "action": "health_summary",
                         }
                         resp = invoke_lambda(payload)
                         if resp:
@@ -950,8 +940,8 @@ class DearCare:
                         else:
                             self.log.warning("[MAIN] Lambda returned None for %s", eid)
 
-                        # Also trigger clinical notes generation
-                        for action in ["generate_notes", "health_summary"]:
+                        # Also trigger clinical notes and triage review
+                        for action in ["generate_notes", "triage_review"]:
                             try:
                                 invoke_lambda({"encounter_id": eid, "action": action})
                             except Exception:
@@ -960,23 +950,23 @@ class DearCare:
                     except Exception as e:
                         self.log.warning("[MAIN] Lambda invocation error: %s", e)
 
-                    # Notify Fit-U mobile app with Lambda results
-                    if lambda_output:
-                        try:
-                            from fitu_client import FituClient
-                            import config
-                            fitu = FituClient(config)
-                            if fitu.is_available():
-                                worker_id = summary.get("worker_id", "")
-                                fitu.notify_fitu_verdict_ready(
-                                    worker_id=worker_id,
-                                    encounter_id=eid,
-                                    triage_level=summary.get("triage_level", "ROUTINE"),
-                                    summary=lambda_output
-                                )
-                                self.log.info("[MAIN] Lambda result sent to mobile app")
-                        except Exception as e:
-                            self.log.warning("[MAIN] Fit-U notification error: %s", e)
+                    # Notify Fit-U mobile app
+                    try:
+                        from fitu_client import FituClient
+                        import config
+                        fitu = FituClient(config)
+                        if fitu.is_available():
+                            worker_id = summary.get("worker_id", "")
+                            notification_text = lambda_output or f"Encounter {eid} processed for {patient}."
+                            fitu.notify_fitu_verdict_ready(
+                                worker_id=worker_id,
+                                encounter_id=eid,
+                                triage_level=summary.get("triage_level", "ROUTINE"),
+                                summary=notification_text
+                            )
+                            self.log.info("[MAIN] Notification sent to mobile app")
+                    except Exception as e:
+                        self.log.warning("[MAIN] Fit-U notification error: %s", e)
 
                 else:
                     self.speak("Upload pending. Data saved locally.")
