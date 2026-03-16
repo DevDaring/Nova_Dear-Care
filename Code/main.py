@@ -148,6 +148,20 @@ class DearCare:
     # Voice I/O
     # ------------------------------------------------------------------
 
+    # Words indicating affirmative/negative responses (matched as whole words)
+    _YES_WORDS = {"yes", "yeah", "haan", "ha", "ji", "ok", "okay", "sure", "yep"}
+    _NO_WORDS = {"no", "nahi", "nah", "nope", "na"}
+
+    def _is_yes(self, text: str) -> bool:
+        """Check if text is an affirmative response (whole-word matching)."""
+        if not text:
+            return False
+        words = set(text.lower().split())
+        # If any explicit no-word is present, deny takes priority
+        if words & self._NO_WORDS:
+            return False
+        return bool(words & self._YES_WORDS)
+
     def _beep(self):
         """Play a short beep sound."""
         try:
@@ -646,8 +660,7 @@ class DearCare:
                 masked = aadhaar[:4] + " **** " + aadhaar[-4:]
                 self.speak(f"I heard Aadhaar number {masked}. Is that correct?")
                 confirm = self.listen_response(duration=5)
-                if confirm and any(w in confirm.lower() for w in
-                                   ["yes", "yeah", "haan", "ha", "ji", "ok", "correct", "right"]):
+                if self._is_yes(confirm) or (confirm and any(w in confirm.lower().split() for w in ["correct", "right"])):
                     return aadhaar
                 else:
                     self.speak("Let me try again.")
@@ -803,7 +816,7 @@ class DearCare:
                 # --- Step 2: Prescription Capture ---
                 self.speak("Do you have any prescriptions or medical documents to scan?")
                 resp = self.listen_response(duration=5)
-                if resp and any(w in resp.lower() for w in ["yes", "yeah", "haan", "ha", "ji", "ok"]):
+                if self._is_yes(resp):
                     self._capture_prescription()
                     free_memory()
 
@@ -811,7 +824,7 @@ class DearCare:
                     while _running:
                         self.speak("Do you have another prescription to scan?")
                         resp = self.listen_response(duration=5)
-                        if resp and any(w in resp.lower() for w in ["yes", "yeah", "haan", "ha", "ji", "ok"]):
+                        if self._is_yes(resp):
                             self._capture_prescription()
                             free_memory()
                         else:
@@ -846,8 +859,7 @@ class DearCare:
                 # --- Step 7: Ask for consultation ---
                 self.speak("Would you like a health consultation?")
                 resp = self.listen_response(duration=5)
-                if resp and any(w in resp.lower() for w in
-                               ["yes", "yeah", "haan", "ha", "ji", "ok", "consultation", "consult"]):
+                if self._is_yes(resp) or (resp and any(w in resp.lower().split() for w in ["consultation", "consult"])):
                     self._health_consultation()
                     # Re-save encounter with consultation notes
                     if self.encounter.active:
@@ -861,7 +873,7 @@ class DearCare:
                 # Ask for another patient
                 self.speak("Would you like to check another patient?")
                 resp = self.listen_response(duration=5)
-                if not resp or not any(w in resp.lower() for w in ["yes", "yeah", "haan", "ha", "ji", "ok"]):
+                if not self._is_yes(resp):
                     break
 
             except KeyboardInterrupt:
