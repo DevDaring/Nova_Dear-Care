@@ -71,8 +71,8 @@ class EncounterManager:
         if self.fitu_client is None:
             try:
                 from fitu_client import FituClient
-                from config import Config
-                self.fitu_client = FituClient(Config())
+                import config
+                self.fitu_client = FituClient(config)
                 _logger().info("[ENC] Fit-U client initialized")
             except Exception as e:
                 _logger().warning("[ENC] Fit-U client init failed: %s", e)

@@ -949,7 +949,8 @@ class DearCare:
                     if lambda_output:
                         try:
                             from fitu_client import FituClient
-                            fitu = FituClient()
+                            import config
+                            fitu = FituClient(config)
                             if fitu.is_available():
                                 worker_id = summary.get("worker_id", "")
                                 fitu.notify_fitu_verdict_ready(

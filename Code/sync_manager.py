@@ -39,8 +39,8 @@ class SyncManager:
         if self.fitu_client is None:
             try:
                 from fitu_client import FituClient
-                from config import Config
-                self.fitu_client = FituClient(Config())
+                import config
+                self.fitu_client = FituClient(config)
             except Exception as e:
                 _logger().warning("[SYNC] Fit-U client init failed: %s", e)
         return self.fitu_client
