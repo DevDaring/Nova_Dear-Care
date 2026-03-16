@@ -22,7 +22,7 @@ import boto3
 
 REGION = os.environ.get("AWS_REGION_NAME", os.environ.get("AWS_REGION", "us-east-1"))
 BUCKET = os.environ.get("S3_BUCKET_NAME", "dear-care-data")
-MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
+MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-2-lite-v1:0")
 SNS_TOPIC_ARN = os.environ.get("FITU_SNS_TOPIC_ARN", "")
 FITU_HEALTH_TABLE = os.environ.get("FITU_DYNAMODB_TABLE", "dear-care-fitu-health")
 VERDICTS_TABLE = os.environ.get("VERDICTS_DYNAMODB_TABLE", "dear-care-verdicts")

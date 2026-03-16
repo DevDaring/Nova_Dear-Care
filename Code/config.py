@@ -124,7 +124,7 @@ OCR_FONT_PATH = str(BASE_DIR / "doc" / "fonts" / "simfang.ttf")
 # ============================================================
 # BEDROCK MODEL CONFIGURATION
 # ============================================================
-BEDROCK_MODEL_ID = "amazon.nova-lite-v1:0"
+BEDROCK_MODEL_ID = "amazon.nova-2-lite-v1:0"
 BEDROCK_MAX_TOKENS = 512
 BEDROCK_TEMPERATURE = 0.7
 

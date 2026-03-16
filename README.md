@@ -47,7 +47,7 @@
 
 | Nova Service | Usage in Dear-Care |
 |---|---|
-| **Amazon Nova Lite** (`amazon.nova-lite-v1:0`) | Core reasoning — intent classification, Aadhaar extraction, prescription analysis, health consultation, clinical notes generation, triage review, health summary |
+| **Amazon Nova 2 Lite** (`amazon.nova-2-lite-v1:0`) | Core reasoning — intent classification, Aadhaar extraction, prescription analysis, health consultation, clinical notes generation, triage review, health summary |
 | **Amazon Polly** (Neural) | Primary TTS engine — 7 languages with Neural voices |
 | **Amazon Transcribe** Streaming | Real-time speech-to-text via WebSocket |
 
@@ -318,7 +318,7 @@ AI review of the on-device triage decision. Validates whether the URGENT/ROUTINE
 |----------|---------|
 | `AWS_REGION` | `us-east-1` |
 | `S3_BUCKET_NAME` | `dear-care-data` |
-| `BEDROCK_MODEL_ID` | `amazon.nova-lite-v1:0` |
+| `BEDROCK_MODEL_ID` | `amazon.nova-2-lite-v1:0` |
 | `FITU_SNS_TOPIC_ARN` | (configured per deployment) |
 | `FITU_DYNAMODB_TABLE` | `dear-care-fitu-health` |
 | `VERDICTS_DYNAMODB_TABLE` | `dear-care-verdicts` |
@@ -412,7 +412,7 @@ The intent classifier recognizes 14 intents:
 
 | Constant | Value |
 |----------|-------|
-| `BEDROCK_MODEL_ID` | `amazon.nova-lite-v1:0` |
+| `BEDROCK_MODEL_ID` | `amazon.nova-2-lite-v1:0` |
 | `BEDROCK_MAX_TOKENS` | `512` |
 | `BEDROCK_TEMPERATURE` | `0.7` |
 
@@ -536,7 +536,7 @@ AWS_REGION=us-east-1
 S3_BUCKET_NAME=dear-care-data-<account_id>
 
 # Bedrock
-BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
+BEDROCK_MODEL_ID=amazon.nova-2-lite-v1:0
 
 # Lambda
 LAMBDA_FUNCTION_NAME=dear-care-clinical-notes

@@ -689,7 +689,7 @@ aws sts get-caller-identity
 
 # Check Bedrock
 aws bedrock-runtime invoke-model \
-    --model-id amazon.nova-lite-v1:0 \
+    --model-id amazon.nova-2-lite-v1:0 \
     --body '{"messages":[{"role":"user","content":[{"text":"hello"}]}]}' \
     /tmp/bedrock_test.json
 
@@ -707,7 +707,7 @@ AWS_DEFAULT_REGION=us-east-1
 AWS_ACCESS_KEY_ID=<your_key>
 AWS_SECRET_ACCESS_KEY=<your_secret>
 S3_BUCKET=pocket-asha-data-<account_id>
-BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
+BEDROCK_MODEL_ID=amazon.nova-2-lite-v1:0
 ```
 
 ### Current Status

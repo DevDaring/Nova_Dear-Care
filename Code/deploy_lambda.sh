@@ -77,7 +77,7 @@ if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$REGION" 2
         --function-name "$FUNCTION_NAME" \
         --timeout "$TIMEOUT" \
         --memory-size "$MEMORY" \
-        --environment "Variables={S3_BUCKET_NAME=$S3_BUCKET,AWS_REGION_NAME=$REGION,BEDROCK_MODEL_ID=amazon.nova-lite-v1:0}" \
+        --environment "Variables={S3_BUCKET_NAME=$S3_BUCKET,AWS_REGION_NAME=$REGION,BEDROCK_MODEL_ID=amazon.nova-2-lite-v1:0}" \
         --region "$REGION"
 else
     echo "  Creating new function..."
@@ -89,7 +89,7 @@ else
         --zip-file fileb:///tmp/pocket-asha-lambda.zip \
         --timeout "$TIMEOUT" \
         --memory-size "$MEMORY" \
-        --environment "Variables={S3_BUCKET_NAME=$S3_BUCKET,AWS_REGION_NAME=$REGION,BEDROCK_MODEL_ID=amazon.nova-lite-v1:0}" \
+        --environment "Variables={S3_BUCKET_NAME=$S3_BUCKET,AWS_REGION_NAME=$REGION,BEDROCK_MODEL_ID=amazon.nova-2-lite-v1:0}" \
         --region "$REGION"
 fi
 

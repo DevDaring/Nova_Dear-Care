@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 aws_handler.py - AWS Bedrock (LLM), S3, Lambda integration for Dear-Care.
-Uses Amazon Nova Lite (amazon.nova-lite-v1:0) via Bedrock for text reasoning.
+Uses Amazon Nova 2 Lite (amazon.nova-2-lite-v1:0) via Bedrock for text reasoning.
 TTS handled by Amazon Polly (in voice_handler.py).
 """
 
