@@ -152,15 +152,17 @@ class DearCare:
     _YES_WORDS = {"yes", "yeah", "haan", "ha", "ji", "ok", "okay", "sure", "yep"}
     _NO_WORDS = {"no", "nahi", "nah", "nope", "na"}
 
-    def _is_yes(self, text: str) -> bool:
-        """Check if text is an affirmative response (whole-word matching)."""
+    def _is_yes(self, text: str, extra_yes: set = None) -> bool:
+        """Check if text is an affirmative response (whole-word matching).
+        Strips punctuation so 'yes,' / 'correct.' etc. still match."""
         if not text:
             return False
-        words = set(text.lower().split())
+        words = set(re.sub(r'[^\w\s]', '', text.lower()).split())
         # If any explicit no-word is present, deny takes priority
         if words & self._NO_WORDS:
             return False
-        return bool(words & self._YES_WORDS)
+        yes = self._YES_WORDS | extra_yes if extra_yes else self._YES_WORDS
+        return bool(words & yes)
 
     def _beep(self):
         """Play a short beep sound."""
@@ -660,7 +662,7 @@ class DearCare:
                 masked = aadhaar[:4] + " **** " + aadhaar[-4:]
                 self.speak(f"I heard Aadhaar number {masked}. Is that correct?")
                 confirm = self.listen_response(duration=5)
-                if self._is_yes(confirm) or (confirm and any(w in confirm.lower().split() for w in ["correct", "right"])):
+                if self._is_yes(confirm, extra_yes={"correct", "right"}):
                     return aadhaar
                 else:
                     self.speak("Let me try again.")
@@ -859,7 +861,7 @@ class DearCare:
                 # --- Step 7: Ask for consultation ---
                 self.speak("Would you like a health consultation?")
                 resp = self.listen_response(duration=5)
-                if self._is_yes(resp) or (resp and any(w in resp.lower().split() for w in ["consultation", "consult"])):
+                if self._is_yes(resp, extra_yes={"consultation", "consult"}):
                     self._health_consultation()
                     # Re-save encounter with consultation notes
                     if self.encounter.active:
