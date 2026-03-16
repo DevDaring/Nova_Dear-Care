@@ -789,7 +789,8 @@ class DearCare:
                 self.encounter = EncounterManager()
                 eid = self.encounter.start()
                 self.encounter.data["worker_id"] = config.WORKER_ID
-                self.log.info("[MAIN] Encounter %s started", eid)
+                self.encounter.data["device_aadhaar"] = config.DEVICE_AADHAAR
+                self.log.info("[MAIN] Encounter %s started (device linked to Aadhaar %s)", eid, config.DEVICE_AADHAAR)
 
                 # --- Step 1: Collect Aadhaar ---
                 self.aadhaar = self._collect_aadhaar()

@@ -35,6 +35,7 @@ FITU_SNS_TOPIC_ARN = os.getenv("FITU_SNS_TOPIC_ARN", "")
 FITU_DATA_S3_PREFIX = os.getenv("FITU_DATA_S3_PREFIX", "fitu-companion/")
 FITU_DYNAMODB_TABLE = os.getenv("FITU_DYNAMODB_TABLE", "dear-care-fitu-health")
 WORKER_ID = os.getenv("WORKER_ID", "DC-KOUSHIK-001")
+DEVICE_AADHAAR = os.getenv("DEVICE_AADHAAR", "123456789012")
 VERDICT_SERVER_PORT = int(os.getenv("VERDICT_SERVER_PORT", "8080"))
 
 # ============================================================
