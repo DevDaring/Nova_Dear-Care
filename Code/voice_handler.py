@@ -214,7 +214,7 @@ def _try_nova_sonic_tts(text: str, output_path: str) -> bool:
         pcm_audio = invoke_nova_sonic_voice(text, language_code=lang_code)
         if pcm_audio:
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-            _pcm_to_wav(pcm_audio, output_path)
+            _pcm_to_wav(pcm_audio, output_path, rate=24000)  # Nova Sonic outputs 24kHz
             _logger().info("[TTS] PRIMARY: NovaSonic generated: %s", output_path)
             return True
         return False

@@ -86,3 +86,4 @@ create_aws_diagram.py
 wifi_guide.md
 .kiro/
 .venv/
+.venv312/
